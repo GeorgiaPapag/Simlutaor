@@ -36,6 +36,12 @@ class ArrivalProcess:
                 arrival_time=self.env.now,
                 is_seated=is_seated
             )
+            # test
+            # print(
+            #     f"{self.env.now:.2f} | "
+            #     f"Customer {customer.id} arrived | "
+            #     f"seated={customer.is_seated}"
+            # )
 
             # start customer life-cycle (stub for now)
             self.env.process(self.customer_process.run(customer))
