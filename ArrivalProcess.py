@@ -46,3 +46,6 @@ class ArrivalProcess:
             # start customer life-cycle (stub for now)
             self.env.process(self.customer_process.run(customer))
 
+            print(f"{self.env.now:.2f} | Customer {customer.id} arrived")
+
+
