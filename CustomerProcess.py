@@ -4,12 +4,11 @@ import random
 # Mapping σταδίων -> (resource_name, service_time_key)
 # --------------------------------------------------
 STAGE_RESOURCES = {
-    "coffee": ("barista", "COFFEE"),
-    "ice_cream": ("scooper", "ICE_CREAM_PER_SCOOP"),  # per scoop
-    "toppings": ("toppings_staff", "TOPPINGS"),
+    "ice_cream": ("scooper", "ICE_CREAM_PER_SCOOP"),
     "waffle": ("waffle_maker", "WAFFLE"),
-    "milkshake": ("scooper", "MILKSHAKE"),            # απλοποίηση: ίδιος πόρος με scooper
-    # "small_purchase" θα το χειριστούμε ειδικά (χωρίς πόρο)
+    "coffee": ("barista", "COFFEE"),
+    "milkshake": ("barista", "MILKSHAKE"),
+    "toppings": ("toppings_staff", "TOPPINGS"),
 }
 
 class CustomerProcess:
@@ -69,6 +68,19 @@ class CustomerProcess:
             yield self.env.timeout(service_time)
 
         return True
+    
+    def sample_time(self, param):
+        """
+        param is either (min,max) for uniform or (mean,std) for normal
+        """
+        a, b = param
+        # SERVING είναι uniform στο config, ORDER επίσης uniform
+        # PAYMENT/CONSUMPTION είναι normal στο config (mean,std)
+        # Εμείς δεν ξεχωρίζουμε με tag, απλά εφαρμόζουμε:
+        # - αν θες 100% σωστό: θα το κάνουμε μετά με flags.
+        # Προς το παρόν: χρησιμοποιούμε normal για ό,τι έχει std "λογικό" και uniform για serving/order.
+        return max(0.0, random.gauss(a, b))
+
 
     # --------------------------------------------------
     # Initial product choice (uses INITIAL_ORDER_PROBS)
@@ -162,6 +174,42 @@ class CustomerProcess:
                 break
 
             current_stage = next_stage
+
+        # -------------------------
+        # Seated vs Takeaway
+        # -------------------------
+        if customer.is_seated:
+            print(f"{self.env.now:.2f} | Customer {customer.id} wants table")
+             # 1️⃣ Αναμονή για τραπέζι (μέχρι 5')
+            with self.resources.tables.request() as table_req:
+                result = yield table_req | self.env.timeout(
+                    self.config.waiting_rules.MAX_TABLE_WAIT
+                )
+
+                if table_req not in result:
+                    # δεν βρήκε τραπέζι → γίνεται πακέτο
+                    customer.is_seated = False
+                else:
+                    # 2️⃣ Σερβίρισμα από σερβιτόρο
+                    with self.resources.waiter.request() as w_req:
+                        yield w_req
+                        serve_min, serve_max = self.config.service_times.SERVING
+                        yield self.env.timeout(random.uniform(serve_min, serve_max))
+                        print(f"{self.env.now:.2f} | Customer {customer.id} served")
+
+                    # 3️⃣ Κατανάλωση (χωρίς πόρο)
+                    cons_mean, cons_std = self.config.service_times.CONSUMPTION
+                    yield self.env.timeout(max(0, random.gauss(cons_mean, cons_std)))
+                    print(f"{self.env.now:.2f} | Customer {customer.id} finished consumption")
+
+                    # 4️⃣ Τακτοποίηση τραπεζιού από σερβιτόρο
+                    with self.resources.waiter.request() as w_req:
+                        yield w_req
+                        clean_min, clean_max = self.config.service_times.TABLE_CLEANING
+                        yield self.env.timeout(random.uniform(clean_min, clean_max))
+                    # (table released automatically when leaving "with tables.request()")
+                    print(f"{self.env.now:.2f} | Customer {customer.id} table cleaned")
+
 
         # -------------------------
         # Payment (no abandonment)
