@@ -13,7 +13,7 @@ def main():
     arrival_process = ArrivalProcess(env, config, customer_process)
 
     env.process(arrival_process.run())
-    env.run(until=60)
+    env.run(until=90)
 
 if __name__ == "__main__":
     main()

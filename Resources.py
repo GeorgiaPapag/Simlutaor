@@ -17,7 +17,7 @@ class Resources:
         )
 
         # Production resources
-        self.scooper = simpy.Resource(
+        self.scooper = simpy.PriorityResource(
             env,
             capacity=config.resources.SCOOPERS
         )
@@ -27,7 +27,7 @@ class Resources:
             capacity=config.resources.WAFFLE_MAKERS
         )
 
-        self.barista = simpy.Resource(
+        self.barista = simpy.PriorityResource(
             env,
             capacity=config.resources.BARISTAS
         )

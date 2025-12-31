@@ -5,10 +5,10 @@ import random
 # --------------------------------------------------
 STAGE_RESOURCES = {
     "ice_cream": ("scooper", "ICE_CREAM_PER_SCOOP"),
+    "toppings": ("toppings_staff", "TOPPINGS"),  # με βοήθεια scooper
     "waffle": ("waffle_maker", "WAFFLE"),
     "coffee": ("barista", "COFFEE"),
-    "milkshake": ("barista", "MILKSHAKE"),
-    "toppings": ("toppings_staff", "TOPPINGS"),
+    "milkshake": ("barista", "MILKSHAKE"),  # 👈 ΜΟΝΟ barista
 }
 
 class CustomerProcess:
@@ -20,11 +20,18 @@ class CustomerProcess:
     # --------------------------------------------------
     # Generic stage execution (queue + abandon + service)
     # --------------------------------------------------
-    def process_stage(self, stage: str):
+    def process_stage(self, customer, stage: str):
         # small_purchase: δεν έχεις ξεχωριστό resource/time στο config,
         # οπότε (προς το παρόν) θεωρούμε ότι δεν δημιουργεί στάδιο παραγωγής.
         if stage == "small_purchase":
             return True
+        
+        # βάζω τον scooper να βοηθήσει αν μπορεί
+        if stage == "toppings":
+         return (yield from self.process_toppings_with_help())
+        
+        if stage in ("coffee", "milkshake"):
+            print(f"{self.env.now:.2f} | Barista busy with {stage}")
 
         if stage not in STAGE_RESOURCES:
             raise KeyError(f"Unknown stage '{stage}'. Add it to STAGE_RESOURCES.")
@@ -44,6 +51,8 @@ class CustomerProcess:
 
             # ειδική περίπτωση: παγωτό = χρόνος ανά μπάλα
             if stage == "ice_cream":
+
+                # ---- service time calculation
                 scoops_probs = self.config.ice_cream.SCOOPS_PROBS  # {1:0.40,2:0.45,3:0.15}
                 scoops = random.choices(
                     population=list(scoops_probs.keys()),
@@ -111,6 +120,76 @@ class CustomerProcess:
             population=list(probs.keys()),
             weights=list(probs.values())
         )[0]
+    
+    def process_toppings_with_help(self):
+        """
+        Toppings can be processed either by:
+        - toppings_staff (primary)
+        - scooper (helper)
+        """
+
+        print(
+            f"{self.env.now:.2f} | "
+            f"DEBUG toppings entry: "
+            f"toppings_staff busy={self.resources.toppings_staff.count} queue={len(self.resources.toppings_staff.queue)} | "
+            f"scooper busy={self.resources.scooper.count} queue={len(self.resources.scooper.queue)}"
+        )
+
+        toppings_req = self.resources.toppings_staff.request()
+        scooper_req = self.resources.scooper.request()
+
+        result = yield (
+            toppings_req |
+            scooper_req |
+            self.env.timeout(self.config.waiting_rules.MAX_QUEUE_WAIT)
+        )
+
+        # Abandonment
+        if result == {}:
+            return False
+
+        # # Determine who served
+        # if toppings_req in result:
+        #     server = "toppings_staff"
+        #     yield toppings_req
+        #     scooper_req.cancel()
+        # elif scooper_req in result:
+        #     server = "scooper"
+        #     yield scooper_req
+        #     toppings_req.cancel()
+        # else:
+        #     return False
+        if toppings_req in result:
+            server = "toppings_staff"
+            yield toppings_req
+            scooper_req.cancel()
+
+        elif scooper_req in result:
+            server = "scooper"
+            yield scooper_req
+            toppings_req.cancel()
+
+        else:
+            return False
+
+        # 👇 ΤΟ PRINT ΜΠΑΙΝΕΙ ΕΔΩ
+        print(
+            f"{self.env.now:.2f} | "
+            f"Toppings served by {server}"
+        )
+
+
+        # Service time
+        service_time = self.config.service_times.TOPPINGS
+        if isinstance(service_time, tuple):
+            service_time = random.uniform(*service_time)
+
+        yield self.env.timeout(service_time)
+
+        print(f"{self.env.now:.2f} | Toppings served by {server}")
+
+        return True
+
 
     # --------------------------------------------------
     # Main customer flow
@@ -136,6 +215,9 @@ class CustomerProcess:
         # flag: αν το παγωτό που έρχεται είναι "μετά από βάφλα"
         next_icecream_is_after_waffle = False
 
+
+        customer.is_continuation = False
+
         # ---- Loop of stages ----
         while True:
             print(
@@ -143,7 +225,7 @@ class CustomerProcess:
                 f"Customer {customer.id} enters stage {current_stage}"
             )
 
-            ok = yield from self.process_stage(current_stage)
+            ok = yield from self.process_stage(customer, current_stage)
             
             if not ok:
                 print(
@@ -151,6 +233,9 @@ class CustomerProcess:
                     f"Customer {customer.id} abandoned at {current_stage}"
                 )
                 return  # abandon
+
+            customer.is_continuation = True
+
 
             # Αν μόλις έκανες βάφλα, το επόμενο παγωτό είναι "after waffle"
             came_from_waffle = next_icecream_is_after_waffle
