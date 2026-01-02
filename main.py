@@ -16,16 +16,24 @@ def main():
     
     env.process(arrival_process.run())
     env.run(until=90)
+    print("cashier_waits samples:", stats.cashier_waits[:5])
+    print("scooper_waits samples:", stats.scooper_waits[:5])
+
 
     print("---- STATS ----")
     print("Total customers:", stats.total_customers)
     print("Abandoned customers:", stats.abandoned_customers)
 
-    if stats.total_customers > 0:
-        print(
-            "Abandonment rate:",
-            stats.abandoned_customers / stats.total_customers
-        )
+    print("---- PERFORMANCE METRICS ----")
+    print("Total customers:", stats.total_customers)
+    print("Abandonment rate:",
+        stats.abandoned_customers / stats.total_customers)
+
+    print("95th percentile cashier wait:",
+        stats.p95_cashier_wait())
+
+    print("95th percentile scooper wait:",
+        stats.p95_scooper_wait())
 
 if __name__ == "__main__":
     main()

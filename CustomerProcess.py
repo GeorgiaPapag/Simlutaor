@@ -18,7 +18,6 @@ class CustomerProcess:
         self.config = config
         self.stats = stats
 
-    # --------------------------------------------------
     # Generic stage execution (queue + abandon + service)
     # --------------------------------------------------
     def process_stage(self, customer, stage: str):
@@ -41,14 +40,13 @@ class CustomerProcess:
         resource = getattr(self.resources, resource_name)
 
         # ΟΡΙΣΜΟΣ ΠΡΟΤΕΡΑΙΟΤΗΤΑΣ 
-        # priority = 0 if (stage == "ice_cream" and customer.is_continuation) else 1
         priority = 1  # default
 
-        # 🔴 Scooper priority: παγωτό ΜΟΝΟ μετά από βάφλα
+        # Scooper priority: παγωτό ΜΟΝΟ μετά από βάφλα
         if stage == "ice_cream" and customer.previous_stage == "waffle":
             priority = 0
 
-        # 🔴 Barista priority: καφές ΜΟΝΟ μετά από παγωτό
+        #  Barista priority: καφές ΜΟΝΟ μετά από παγωτό
         if stage == "coffee" and customer.previous_stage == "ice_cream":
             priority = 0
         
@@ -195,15 +193,26 @@ class CustomerProcess:
     # --------------------------------------------------
     def run(self, customer):
         print(f"{self.env.now:.2f} | Customer {customer.id} started")
+        
+        # start time
+        t0 = self.env.now
+
         # ---- Order at cashier ----
         with self.resources.cashier.request(priority=0) as req:
             result = yield req | self.env.timeout(self.config.waiting_rules.MAX_QUEUE_WAIT)
             if req not in result:
+                self.stats.abandoned_customers += 1
                 return
+            
+            if (self.env.now - t0) < 6:
+                # calculate time
+                self.stats.add_cashier_wait(self.env.now - t0)
 
             order_min, order_max = self.config.service_times.ORDER
             yield self.env.timeout(random.uniform(order_min, order_max))
+            
         print(f"{self.env.now:.2f} | Customer {customer.id} ordered")
+
         # ---- Initial product ----
         current_stage = self.choose_initial_product()
         print(
@@ -278,19 +287,19 @@ class CustomerProcess:
                     # δεν βρήκε τραπέζι → γίνεται πακέτο
                     customer.is_seated = False
                 else:
-                    # 2️⃣ Σερβίρισμα από σερβιτόρο
+                    # Σερβίρισμα από σερβιτόρο
                     with self.resources.waiter.request() as w_req:
                         yield w_req
                         serve_min, serve_max = self.config.service_times.SERVING
                         yield self.env.timeout(random.uniform(serve_min, serve_max))
                         print(f"{self.env.now:.2f} | Customer {customer.id} served")
 
-                    # 3️⃣ Κατανάλωση (χωρίς πόρο)
+                    # Κατανάλωση (χωρίς πόρο)
                     cons_mean, cons_std = self.config.service_times.CONSUMPTION
                     yield self.env.timeout(max(0, random.gauss(cons_mean, cons_std)))
                     print(f"{self.env.now:.2f} | Customer {customer.id} finished consumption")
 
-                    # 4️⃣ Τακτοποίηση τραπεζιού από σερβιτόρο
+                    # Τακτοποίηση τραπεζιού από σερβιτόρο
                     with self.resources.waiter.request() as w_req:
                         yield w_req
                         clean_min, clean_max = self.config.service_times.TABLE_CLEANING
