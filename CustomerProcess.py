@@ -28,7 +28,7 @@ class CustomerProcess:
         
         # βάζω τον scooper να βοηθήσει αν μπορεί
         if stage == "toppings":
-         return (yield from self.process_toppings_with_help())
+         return (yield from self.process_toppings_with_help(customer))
         
         if stage in ("coffee", "milkshake"):
             print(f"{self.env.now:.2f} | Barista busy with {stage}")
@@ -39,7 +39,30 @@ class CustomerProcess:
         resource_name, time_key = STAGE_RESOURCES[stage]
         resource = getattr(self.resources, resource_name)
 
-        with resource.request() as req:
+        # ΟΡΙΣΜΟΣ ΠΡΟΤΕΡΑΙΟΤΗΤΑΣ
+        priority = 0 if (stage == "ice_cream" and customer.is_continuation) else 1
+        print(
+            f"{self.env.now:.2f} | "
+            f"DEBUG request: customer={customer.id}, "
+            f"stage={stage}, priority={priority}, "
+            f"continuation={customer.is_continuation}"
+
+        )
+        use_priority = stage in ("ice_cream", "coffee", "milkshake")
+
+        if use_priority:
+            with resource.request(priority=priority) as req:
+                result = yield req | self.env.timeout(
+                    self.config.waiting_rules.MAX_QUEUE_WAIT
+                )
+        else:
+            with resource.request() as req:
+                result = yield req | self.env.timeout(
+                    self.config.waiting_rules.MAX_QUEUE_WAIT
+                )
+
+        
+        # with resource.request(priority=priority) as req:
             result = yield req | self.env.timeout(self.config.waiting_rules.MAX_QUEUE_WAIT)
 
             # Abandon if waited too long (σε ΟΠΟΙΑΔΗΠΟΤΕ ουρά παραγωγής)
@@ -51,7 +74,6 @@ class CustomerProcess:
 
             # ειδική περίπτωση: παγωτό = χρόνος ανά μπάλα
             if stage == "ice_cream":
-
                 # ---- service time calculation
                 scoops_probs = self.config.ice_cream.SCOOPS_PROBS  # {1:0.40,2:0.45,3:0.15}
                 scoops = random.choices(
@@ -121,7 +143,7 @@ class CustomerProcess:
             weights=list(probs.values())
         )[0]
     
-    def process_toppings_with_help(self):
+    def process_toppings_with_help(self, customer):
         """
         Toppings can be processed either by:
         - toppings_staff (primary)
@@ -172,11 +194,11 @@ class CustomerProcess:
         else:
             return False
 
-        # 👇 ΤΟ PRINT ΜΠΑΙΝΕΙ ΕΔΩ
-        print(
-            f"{self.env.now:.2f} | "
-            f"Toppings served by {server}"
-        )
+        # # 👇 ΤΟ PRINT ΜΠΑΙΝΕΙ ΕΔΩ
+        # print(
+        #     f"{self.env.now:.2f} | "
+        #     f"Toppings served by {server}"
+        # )
 
 
         # Service time
