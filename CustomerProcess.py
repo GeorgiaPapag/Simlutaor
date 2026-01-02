@@ -22,7 +22,6 @@ class CustomerProcess:
     # --------------------------------------------------
     def process_stage(self, customer, stage: str):
         # small_purchase: δεν έχεις ξεχωριστό resource/time στο config,
-        # οπότε (προς το παρόν) θεωρούμε ότι δεν δημιουργεί στάδιο παραγωγής.
         if stage == "small_purchase":
             return True
         
@@ -55,42 +54,48 @@ class CustomerProcess:
             f"cust={customer.id}, stage={stage}, prev={customer.previous_stage}, priority={priority}"
         )
 
+        start_wait = self.env.now #έναξη χρόνου
+
         with resource.request(priority=priority) as req:
             result = yield req | self.env.timeout(self.config.waiting_rules.MAX_QUEUE_WAIT)
 
-        # Abandon if waited too long (σε ΟΠΟΙΑΔΗΠΟΤΕ ουρά παραγωγής)
-        if req not in result:
-            self.stats.abandoned_customers += 1 # abandon stat
-            return False
+            # Abandon if waited too long (σε ΟΠΟΙΑΔΗΠΟΤΕ ουρά παραγωγής)
+            if req not in result:
+                self.stats.abandoned_customers += 1 # abandon stat
+                return False
+            # ✅ scooper wait only for ice_cream
+            if stage == "ice_cream":
+                if (self.env.now - start_wait) < 5:
+                    self.stats.scooper_waits.append(self.env.now - start_wait)
 
-        # Service time from config (συνήθως (mean, std) ή (min, max))
-        time_params = getattr(self.config.service_times, time_key)
+            # Service time from config (συνήθως (mean, std) ή (min, max))
+            time_params = getattr(self.config.service_times, time_key)
 
-        # ειδική περίπτωση: παγωτό = χρόνος ανά μπάλα
-        if stage == "ice_cream":
-            # ---- service time calculation
-            scoops_probs = self.config.ice_cream.SCOOPS_PROBS  # {1:0.40,2:0.45,3:0.15}
-            scoops = random.choices(
-                population=list(scoops_probs.keys()),
-                weights=list(scoops_probs.values())
-                )[0]
+            # ειδική περίπτωση: παγωτό = χρόνος ανά μπάλα
+            if stage == "ice_cream":
+                # ---- service time calculation
+                scoops_probs = self.config.ice_cream.SCOOPS_PROBS  # {1:0.40,2:0.45,3:0.15}
+                scoops = random.choices(
+                    population=list(scoops_probs.keys()),
+                    weights=list(scoops_probs.values())
+                    )[0]
 
-            # time_params = (mean, std) per scoop
-            mean, std = time_params
-            per_scoop = max(0.0, random.gauss(mean, std))
-            service_time = scoops * per_scoop
-        else:
-            # γενικός χειρισμός tuple
-            if isinstance(time_params, tuple) and len(time_params) == 2:
-                a, b = time_params
-                # Δεν ξέρουμε εδώ αν είναι (min,max) ή (mean,std) — εσύ το κρατάς ως tuple.
-                # Ακολουθούμε την προσέγγιση που είχες: gauss για (mean,std).
-                # Αν θες uniform για (min,max), το αλλάζουμε μετά με σαφή κανόνα ανά stage.
-                service_time = max(0.0, random.gauss(a, b))
+                # time_params = (mean, std) per scoop
+                mean, std = time_params
+                per_scoop = max(0.0, random.gauss(mean, std))
+                service_time = scoops * per_scoop
             else:
-                 service_time = max(0.0, float(time_params))
+                # γενικός χειρισμός tuple
+                if isinstance(time_params, tuple) and len(time_params) == 2:
+                    a, b = time_params
+                    # Δεν ξέρουμε εδώ αν είναι (min,max) ή (mean,std) — εσύ το κρατάς ως tuple.
+                    # Ακολουθούμε την προσέγγιση που είχες: gauss για (mean,std).
+                    # Αν θες uniform για (min,max), το αλλάζουμε μετά με σαφή κανόνα ανά stage.
+                    service_time = max(0.0, random.gauss(a, b))
+                else:
+                    service_time = max(0.0, float(time_params))
 
-        yield self.env.timeout(service_time)
+            yield self.env.timeout(service_time)
 
         return True
     
@@ -195,7 +200,7 @@ class CustomerProcess:
         print(f"{self.env.now:.2f} | Customer {customer.id} started")
         
         # start time
-        t0 = self.env.now
+        start_wait_cashier = self.env.now
 
         # ---- Order at cashier ----
         with self.resources.cashier.request(priority=0) as req:
@@ -204,9 +209,8 @@ class CustomerProcess:
                 self.stats.abandoned_customers += 1
                 return
             
-            if (self.env.now - t0) < 6:
-                # calculate time
-                self.stats.add_cashier_wait(self.env.now - t0)
+            # calculate time
+            self.stats.add_cashier_wait(self.env.now - start_wait_cashier)
 
             order_min, order_max = self.config.service_times.ORDER
             yield self.env.timeout(random.uniform(order_min, order_max))
