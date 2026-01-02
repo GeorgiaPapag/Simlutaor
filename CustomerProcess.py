@@ -80,15 +80,6 @@ class CustomerProcess:
         with resource.request(priority=priority) as req:
             result = yield req | self.env.timeout(self.config.waiting_rules.MAX_QUEUE_WAIT)
 
-        # # Priority rules for ice cream and espresso
-        # # ----------------------------
-        # if stage == "ice_cream" and customer.is_continuation:
-        #     priority = 0  # παγωτό μετά από βάφλα
-        # elif stage == "coffee" and customer.is_continuation:
-        #     priority = 0  # espresso ΜΕ παγωτό
-        # else:
-        #     priority = 1  # κανονικός πελάτης
-
         # Abandon if waited too long (σε ΟΠΟΙΑΔΗΠΟΤΕ ουρά παραγωγής)
         if req not in result:
             return False
@@ -194,17 +185,6 @@ class CustomerProcess:
         if result == {}:
             return False
 
-        # # Determine who served
-        # if toppings_req in result:
-        #     server = "toppings_staff"
-        #     yield toppings_req
-        #     scooper_req.cancel()
-        # elif scooper_req in result:
-        #     server = "scooper"
-        #     yield scooper_req
-        #     toppings_req.cancel()
-        # else:
-        #     return False
         if toppings_req in result:
             server = "toppings_staff"
             yield toppings_req
@@ -218,13 +198,6 @@ class CustomerProcess:
         else:
             return False
 
-        # # 👇 ΤΟ PRINT ΜΠΑΙΝΕΙ ΕΔΩ
-        # print(
-        #     f"{self.env.now:.2f} | "
-        #     f"Toppings served by {server}"
-        # )
-
-
         # Service time
         service_time = self.config.service_times.TOPPINGS
         if isinstance(service_time, tuple):
@@ -236,8 +209,6 @@ class CustomerProcess:
 
         return True
 
-
-    # --------------------------------------------------
     # Main customer flow
     # --------------------------------------------------
     def run(self, customer):

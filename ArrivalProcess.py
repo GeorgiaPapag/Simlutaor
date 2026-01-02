@@ -2,12 +2,12 @@ import random
 import simpy
 from Customer import Customer
 
-
 class ArrivalProcess:
     def __init__(self, env: simpy.Environment, config, customer_process):
         self.env = env
         self.config = config
         self.customer_process = customer_process
+        self.stats = stats
         self.customer_id = 0
 
     def get_interarrival_time(self) -> float:
@@ -36,12 +36,11 @@ class ArrivalProcess:
                 arrival_time=self.env.now,
                 is_seated=is_seated
             )
-            # test
-            # print(
-            #     f"{self.env.now:.2f} | "
-            #     f"Customer {customer.id} arrived | "
-            #     f"seated={customer.is_seated}"
-            # )
+
+            self.stats.total_customers += 1
+
+            self.env.process(self.customer_process.run(customer))
+            print(f"{self.env.now:.2f} | Customer {customer.id} arrived")
 
             # start customer life-cycle (stub for now)
             self.env.process(self.customer_process.run(customer))
