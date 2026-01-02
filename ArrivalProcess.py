@@ -3,7 +3,7 @@ import simpy
 from Customer import Customer
 
 class ArrivalProcess:
-    def __init__(self, env: simpy.Environment, config, customer_process):
+    def __init__(self, env: simpy.Environment, config, customer_process, stats):
         self.env = env
         self.config = config
         self.customer_process = customer_process
@@ -28,6 +28,7 @@ class ArrivalProcess:
             yield self.env.timeout(interarrival)
 
             self.customer_id += 1
+            self.stats.total_customers += 1
 
             is_seated = random.random() < self.config.consumption.SEATED_PROB
 
@@ -37,14 +38,5 @@ class ArrivalProcess:
                 is_seated=is_seated
             )
 
-            self.stats.total_customers += 1
-
             self.env.process(self.customer_process.run(customer))
             print(f"{self.env.now:.2f} | Customer {customer.id} arrived")
-
-            # start customer life-cycle (stub for now)
-            self.env.process(self.customer_process.run(customer))
-
-            print(f"{self.env.now:.2f} | Customer {customer.id} arrived")
-
-

@@ -12,10 +12,11 @@ STAGE_RESOURCES = {
 }
 
 class CustomerProcess:
-    def __init__(self, env, resources, config):
+    def __init__(self, env, resources, config, stats):
         self.env = env
         self.resources = resources
         self.config = config
+        self.stats = stats
 
     # --------------------------------------------------
     # Generic stage execution (queue + abandon + service)
@@ -61,6 +62,7 @@ class CustomerProcess:
 
         # Abandon if waited too long (σε ΟΠΟΙΑΔΗΠΟΤΕ ουρά παραγωγής)
         if req not in result:
+            self.stats.abandoned_customers += 1 # abandon stat
             return False
 
         # Service time from config (συνήθως (mean, std) ή (min, max))
@@ -162,6 +164,7 @@ class CustomerProcess:
 
         # Abandonment
         if result == {}:
+            self.stats.abandoned_customers += 1 # abandon stat
             return False
 
         if toppings_req in result:
