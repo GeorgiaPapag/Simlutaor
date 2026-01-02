@@ -54,19 +54,28 @@ class CustomerProcess:
             f"cust={customer.id}, stage={stage}, prev={customer.previous_stage}, priority={priority}"
         )
 
-        start_wait = self.env.now #έναξη χρόνου
+        start_wait_scooping = None
+
+        # only for ice_cream
+        if stage == "ice_cream":
+            start_wait_scooping = self.env.now # start of waiting
 
         with resource.request(priority=priority) as req:
             result = yield req | self.env.timeout(self.config.waiting_rules.MAX_QUEUE_WAIT)
 
             # Abandon if waited too long (σε ΟΠΟΙΑΔΗΠΟΤΕ ουρά παραγωγής)
             if req not in result:
-                self.stats.abandoned_customers += 1 # abandon stat
+                if stage == "ice_cream":
+                    self.stats.scooper_waits.append(
+                        self.config.waiting_rules.MAX_QUEUE_WAIT
+                    )
+                self.stats.abandoned_customers += 1
                 return False
-            # ✅ scooper wait only for ice_cream
+
+            
+            # end of waiting
             if stage == "ice_cream":
-                if (self.env.now - start_wait) < 5:
-                    self.stats.scooper_waits.append(self.env.now - start_wait)
+                self.stats.scooper_waits.append(self.env.now - start_wait_scooping)
 
             # Service time from config (συνήθως (mean, std) ή (min, max))
             time_params = getattr(self.config.service_times, time_key)

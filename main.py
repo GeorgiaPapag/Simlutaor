@@ -31,11 +31,18 @@ def main():
     print("Abandonment rate:",
         stats.abandoned_customers / stats.total_customers)
 
-    cashier_p95 = np.percentile(stats.cashier_waits, 95)
-    print("95th percentile cashier wait:", cashier_p95)
+    cashier_p95 = stats.p95_cashier_wait()
+    print(
+        "Cashier constraint (<6'): ",
+        cashier_p95, "=","OK" if cashier_p95 < 6 else "VIOLATED"
+    )
 
-    print("95th percentile scooper wait:",
-        stats.p95_scooper_wait())
+    scooper_p95 = stats.p95_scooper_wait()
+    print(
+        "Cashier constraint (<5'): ",
+        scooper_p95, "=", "OK" if scooper_p95 < 5 else "VIOLATED"
+    )
+    
 
 if __name__ == "__main__":
     main()

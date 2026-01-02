@@ -119,8 +119,8 @@ class ServiceTimeConfig:
 # waiting
 @dataclass
 class WaitingRulesConfig:
-    MAX_QUEUE_WAIT: int = 12      # λεπτά
-    MAX_TABLE_WAIT: int = 5       # λεπτά
+    MAX_QUEUE_WAIT: int = 12.0      # λεπτά
+    MAX_TABLE_WAIT: int = 5.0      # λεπτά
 
 # resources px employers
 @dataclass
