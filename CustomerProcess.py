@@ -39,64 +39,88 @@ class CustomerProcess:
         resource_name, time_key = STAGE_RESOURCES[stage]
         resource = getattr(self.resources, resource_name)
 
-        # ΟΡΙΣΜΟΣ ΠΡΟΤΕΡΑΙΟΤΗΤΑΣ
-        priority = 0 if (stage == "ice_cream" and customer.is_continuation) else 1
-        print(
-            f"{self.env.now:.2f} | "
-            f"DEBUG request: customer={customer.id}, "
-            f"stage={stage}, priority={priority}, "
-            f"continuation={customer.is_continuation}"
+        # ΟΡΙΣΜΟΣ ΠΡΟΤΕΡΑΙΟΤΗΤΑΣ 
+        # priority = 0 if (stage == "ice_cream" and customer.is_continuation) else 1
+        priority = 1  # default
 
-        )
-        use_priority = stage in ("ice_cream", "coffee", "milkshake")
+        # 🔴 Scooper priority: παγωτό ΜΟΝΟ μετά από βάφλα
+        if stage == "ice_cream" and customer.previous_stage == "waffle":
+            priority = 0
 
-        if use_priority:
-            with resource.request(priority=priority) as req:
-                result = yield req | self.env.timeout(
-                    self.config.waiting_rules.MAX_QUEUE_WAIT
-                )
-        else:
-            with resource.request() as req:
-                result = yield req | self.env.timeout(
-                    self.config.waiting_rules.MAX_QUEUE_WAIT
-                )
-
+        # 🔴 Barista priority: καφές ΜΟΝΟ μετά από παγωτό
+        if stage == "coffee" and customer.previous_stage == "ice_cream":
+            priority = 0
         
-        # with resource.request(priority=priority) as req:
+        print(
+            f"{self.env.now:.2f} | DEBUG priority: "
+            f"cust={customer.id}, stage={stage}, prev={customer.previous_stage}, priority={priority}"
+        )
+
+        # print(
+        #     f"{self.env.now:.2f} | "
+        #     f"DEBUG request: customer={customer.id}, "
+        #     f"stage={stage}, priority={priority}, "
+        #     f"continuation={customer.is_continuation}"
+
+        # )
+
+        # use_priority = stage in ("ice_cream", "coffee", "milkshake")
+
+        # if use_priority:
+        #     with resource.request(priority=priority) as req:
+        #         result = yield req | self.env.timeout(
+        #             self.config.waiting_rules.MAX_QUEUE_WAIT
+        #         )
+        # else:
+        #     with resource.request() as req:
+        #         result = yield req | self.env.timeout(
+        #             self.config.waiting_rules.MAX_QUEUE_WAIT
+        #         )
+
+        with resource.request(priority=priority) as req:
             result = yield req | self.env.timeout(self.config.waiting_rules.MAX_QUEUE_WAIT)
 
-            # Abandon if waited too long (σε ΟΠΟΙΑΔΗΠΟΤΕ ουρά παραγωγής)
-            if req not in result:
-                return False
+        # # Priority rules for ice cream and espresso
+        # # ----------------------------
+        # if stage == "ice_cream" and customer.is_continuation:
+        #     priority = 0  # παγωτό μετά από βάφλα
+        # elif stage == "coffee" and customer.is_continuation:
+        #     priority = 0  # espresso ΜΕ παγωτό
+        # else:
+        #     priority = 1  # κανονικός πελάτης
 
-            # Service time from config (συνήθως (mean, std) ή (min, max))
-            time_params = getattr(self.config.service_times, time_key)
+        # Abandon if waited too long (σε ΟΠΟΙΑΔΗΠΟΤΕ ουρά παραγωγής)
+        if req not in result:
+            return False
 
-            # ειδική περίπτωση: παγωτό = χρόνος ανά μπάλα
-            if stage == "ice_cream":
-                # ---- service time calculation
-                scoops_probs = self.config.ice_cream.SCOOPS_PROBS  # {1:0.40,2:0.45,3:0.15}
-                scoops = random.choices(
-                    population=list(scoops_probs.keys()),
-                    weights=list(scoops_probs.values())
+        # Service time from config (συνήθως (mean, std) ή (min, max))
+        time_params = getattr(self.config.service_times, time_key)
+
+        # ειδική περίπτωση: παγωτό = χρόνος ανά μπάλα
+        if stage == "ice_cream":
+            # ---- service time calculation
+            scoops_probs = self.config.ice_cream.SCOOPS_PROBS  # {1:0.40,2:0.45,3:0.15}
+            scoops = random.choices(
+                population=list(scoops_probs.keys()),
+                weights=list(scoops_probs.values())
                 )[0]
 
-                # time_params = (mean, std) per scoop
-                mean, std = time_params
-                per_scoop = max(0.0, random.gauss(mean, std))
-                service_time = scoops * per_scoop
+            # time_params = (mean, std) per scoop
+            mean, std = time_params
+            per_scoop = max(0.0, random.gauss(mean, std))
+            service_time = scoops * per_scoop
+        else:
+            # γενικός χειρισμός tuple
+            if isinstance(time_params, tuple) and len(time_params) == 2:
+                a, b = time_params
+                # Δεν ξέρουμε εδώ αν είναι (min,max) ή (mean,std) — εσύ το κρατάς ως tuple.
+                # Ακολουθούμε την προσέγγιση που είχες: gauss για (mean,std).
+                # Αν θες uniform για (min,max), το αλλάζουμε μετά με σαφή κανόνα ανά stage.
+                service_time = max(0.0, random.gauss(a, b))
             else:
-                # γενικός χειρισμός tuple
-                if isinstance(time_params, tuple) and len(time_params) == 2:
-                    a, b = time_params
-                    # Δεν ξέρουμε εδώ αν είναι (min,max) ή (mean,std) — εσύ το κρατάς ως tuple.
-                    # Ακολουθούμε την προσέγγιση που είχες: gauss για (mean,std).
-                    # Αν θες uniform για (min,max), το αλλάζουμε μετά με σαφή κανόνα ανά stage.
-                    service_time = max(0.0, random.gauss(a, b))
-                else:
-                    service_time = max(0.0, float(time_params))
+                 service_time = max(0.0, float(time_params))
 
-            yield self.env.timeout(service_time)
+        yield self.env.timeout(service_time)
 
         return True
     
@@ -238,7 +262,9 @@ class CustomerProcess:
         next_icecream_is_after_waffle = False
 
 
-        customer.is_continuation = False
+        # customer.is_continuation = False
+        previous_stage = None
+        customer.previous_stage = previous_stage
 
         # ---- Loop of stages ----
         while True:
@@ -248,7 +274,7 @@ class CustomerProcess:
             )
 
             ok = yield from self.process_stage(customer, current_stage)
-            
+
             if not ok:
                 print(
                     f"{self.env.now:.2f} | "
@@ -256,7 +282,7 @@ class CustomerProcess:
                 )
                 return  # abandon
 
-            customer.is_continuation = True
+            # customer.is_continuation = True
 
 
             # Αν μόλις έκανες βάφλα, το επόμενο παγωτό είναι "after waffle"
@@ -280,7 +306,9 @@ class CustomerProcess:
             if next_stage == "pay":
                 break
 
+            previous_stage = current_stage
             current_stage = next_stage
+            customer.previous_stage = previous_stage
 
         # -------------------------
         # Seated vs Takeaway

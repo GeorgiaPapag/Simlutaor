@@ -22,7 +22,7 @@ class Resources:
             capacity=config.resources.SCOOPERS
         )
 
-        self.waffle_maker = simpy.Resource(
+        self.waffle_maker = simpy.PriorityResource(
             env,
             capacity=config.resources.WAFFLE_MAKERS
         )
