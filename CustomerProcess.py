@@ -56,27 +56,6 @@ class CustomerProcess:
             f"cust={customer.id}, stage={stage}, prev={customer.previous_stage}, priority={priority}"
         )
 
-        # print(
-        #     f"{self.env.now:.2f} | "
-        #     f"DEBUG request: customer={customer.id}, "
-        #     f"stage={stage}, priority={priority}, "
-        #     f"continuation={customer.is_continuation}"
-
-        # )
-
-        # use_priority = stage in ("ice_cream", "coffee", "milkshake")
-
-        # if use_priority:
-        #     with resource.request(priority=priority) as req:
-        #         result = yield req | self.env.timeout(
-        #             self.config.waiting_rules.MAX_QUEUE_WAIT
-        #         )
-        # else:
-        #     with resource.request() as req:
-        #         result = yield req | self.env.timeout(
-        #             self.config.waiting_rules.MAX_QUEUE_WAIT
-        #         )
-
         with resource.request(priority=priority) as req:
             result = yield req | self.env.timeout(self.config.waiting_rules.MAX_QUEUE_WAIT)
 
