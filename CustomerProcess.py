@@ -106,6 +106,11 @@ class CustomerProcess:
 
             yield self.env.timeout(service_time)
 
+            # ---- resource utilization ----
+            if resource_name in self.stats.resource_busy_time:
+                self.stats.resource_busy_time[resource_name] += service_time
+
+
         return True
     
     def sample_time(self, param):
@@ -222,7 +227,12 @@ class CustomerProcess:
             self.stats.add_cashier_wait(self.env.now - start_wait_cashier)
 
             order_min, order_max = self.config.service_times.ORDER
-            yield self.env.timeout(random.uniform(order_min, order_max))
+            # yield self.env.timeout(random.uniform(order_min, order_max))
+            # utilization
+            service_time = random.uniform(order_min, order_max)
+            yield self.env.timeout(service_time)
+
+            self.stats.resource_busy_time["cashier"] += service_time
             
         print(f"{self.env.now:.2f} | Customer {customer.id} ordered")
 
@@ -304,7 +314,13 @@ class CustomerProcess:
                     with self.resources.waiter.request() as w_req:
                         yield w_req
                         serve_min, serve_max = self.config.service_times.SERVING
-                        yield self.env.timeout(random.uniform(serve_min, serve_max))
+                        # yield self.env.timeout(random.uniform(serve_min, serve_max))
+                        # utilization
+                        serve_time = random.uniform(serve_min, serve_max)
+                        yield self.env.timeout(serve_time)
+
+                        self.stats.resource_busy_time["waiter"] += serve_time
+
                         print(f"{self.env.now:.2f} | Customer {customer.id} served")
 
                     # Κατανάλωση (χωρίς πόρο)
@@ -316,7 +332,13 @@ class CustomerProcess:
                     with self.resources.waiter.request() as w_req:
                         yield w_req
                         clean_min, clean_max = self.config.service_times.TABLE_CLEANING
-                        yield self.env.timeout(random.uniform(clean_min, clean_max))
+                        #yield self.env.timeout(random.uniform(clean_min, clean_max))
+                        # utilization
+                        clean_time = random.uniform(clean_min, clean_max)
+                        yield self.env.timeout(clean_time)
+
+                        self.stats.resource_busy_time["waiter"] += clean_time
+
                     # (table released automatically when leaving "with tables.request()")
                     print(f"{self.env.now:.2f} | Customer {customer.id} table cleaned")
 
@@ -329,7 +351,12 @@ class CustomerProcess:
             yield req
 
             pay_min, pay_max = self.config.service_times.PAYMENT
-            yield self.env.timeout(random.uniform(pay_min, pay_max))
+            # yield self.env.timeout(random.uniform(pay_min, pay_max))
+            # utilization
+            pay_time = random.uniform(pay_min, pay_max)
+            yield self.env.timeout(pay_time)
+
+            self.stats.resource_busy_time["cashier"] += pay_time
 
         print(f"{self.env.now:.2f} | Customer {customer.id} exited system")
         return

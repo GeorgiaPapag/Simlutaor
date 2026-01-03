@@ -42,6 +42,17 @@ def main():
         "Cashier constraint (<5'): ",
         scooper_p95, "=", "OK" if scooper_p95 < 5 else "VIOLATED"
     )
+
+    SIM_TIME = env.now  # συνολικός χρόνος προσομοίωσης
+
+    print("---- UTILIZATION ----")
+    for res, busy in stats.resource_busy_time.items():
+        utilization = busy / SIM_TIME
+        print(
+            f"{res}: {utilization:.2%}",
+            "OK" if 0.70 <= utilization <= 0.85 else "⚠️"
+        )
+
     
 
 if __name__ == "__main__":
