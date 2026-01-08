@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Dict, Tuple, List
+from typing import Literal
+
 
 @dataclass
 class SimTimeConfig:
@@ -98,29 +100,33 @@ class IceCreamConfig:
             3: 0.15,
         }
 
-# uniforms
+
+@dataclass
+class DistSpec:
+    dist: Literal["uniform", "normal"]
+    a: float
+    b: float
+
 @dataclass
 class ServiceTimeConfig:
-    # (min, max) ή (mean, std)
+    ORDER = DistSpec("uniform", 0.5, 1.2)
+    PAYMENT = DistSpec("normal", 0.7, 0.2)
 
-    ORDER: Tuple[float, float] = (0.5, 1.2)          # uniform
-    PAYMENT: Tuple[float, float] = (0.7, 0.2)        # normal
+    ICE_CREAM_PER_SCOOP = DistSpec("normal", 0.4, 0.2)
+    WAFFLE = DistSpec("normal", 3.0, 0.5)
+    MILKSHAKE = DistSpec("normal", 2.8, 0.7)
+    COFFEE = DistSpec("normal", 1.2, 0.3)
+    TOPPINGS = DistSpec("normal", 0.8, 0.3)
 
-    ICE_CREAM_PER_SCOOP: Tuple[float, float] = (0.4, 0.2)
-    WAFFLE: Tuple[float, float] = (3.0, 0.5)
-    MILKSHAKE: Tuple[float, float] = (2.8, 0.7)
-    COFFEE: Tuple[float, float] = (1.2, 0.3)
-    TOPPINGS: Tuple[float, float] = (0.8, 0.3)
-
-    SERVING: Tuple[float, float] = (0.6, 1.4)        # uniform
-    CONSUMPTION: Tuple[float, float] = (10.0, 3.0)   # normal
-    TABLE_CLEANING: Tuple[float, float] = (0.5, 1.0)
+    SERVING = DistSpec("uniform", 0.6, 1.4)
+    CONSUMPTION = DistSpec("normal", 10.0, 3.0)
+    TABLE_CLEANING = DistSpec("uniform", 0.5, 1.0)
 
 # waiting
 @dataclass
 class WaitingRulesConfig:
     MAX_QUEUE_WAIT: int = 12.0      # λεπτά
-    MAX_TABLE_WAIT: int = 5.0      # λεπτά
+    MAX_TABLE_WAIT: int = 5.0       # λεπτά
 
 # resources px employers
 @dataclass

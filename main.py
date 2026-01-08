@@ -1,5 +1,5 @@
 import simpy
-from SimConfig import SimulationConfig
+from SimConfig import SimulationConfig, SimTimeConfig
 from Resources import Resources
 from ArrivalProcess import ArrivalProcess
 from CustomerProcess import CustomerProcess
@@ -14,10 +14,29 @@ def main():
     resources = Resources(env, config)
     customer_process = CustomerProcess(env, resources, config, stats)
     arrival_process = ArrivalProcess(env, config, customer_process, stats)
-    
 
+    # Χρονικές παράμετροι από config
+    WARM_UP = config.time.WARM_UP_TIME
+    DAYS = config.time.RUN_LENGTH_DAYS
+    DAY_LENGTH = config.time.DAY_LENGTH
+
+    TOTAL_TIME = config.time.RUN_LENGTH_DAYS * 24 * 60
+    STEADY_TIME = TOTAL_TIME - config.time.WARM_UP_TIME
+
+
+    # Ξεκινάει η διαδικασία αφίξεων
     env.process(arrival_process.run())
-    env.run(until=90)
+
+    last_time = 0.0
+
+    # 1️⃣ Warm-up period
+    env.run(until=WARM_UP)
+
+    # Reset στατιστικών (όχι πόρων / ουρών)
+    stats.reset()
+
+    # 2️⃣ Κύρια προσομοίωση (steady state)
+    env.run(until=TOTAL_TIME)
     
     print("cashier_waits samples:", stats.cashier_waits[:5])
     print("scooper_waits samples:", stats.scooper_waits[:5])
@@ -43,7 +62,7 @@ def main():
         scooper_p95, "=", "OK" if scooper_p95 < 5 else "VIOLATED"
     )
 
-    SIM_TIME = env.now  # συνολικός χρόνος προσομοίωσης
+    SIM_TIME = STEADY_TIME
 
     print("---- UTILIZATION ----")
     for res, busy in stats.resource_busy_time.items():
@@ -54,7 +73,6 @@ def main():
         )
 
     
-
 if __name__ == "__main__":
     main()
 

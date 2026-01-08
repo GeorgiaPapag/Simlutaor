@@ -7,12 +7,14 @@ class Stats:
 
         self.cashier_waits = []
         self.scooper_waits = []
+        self.toppings_waits = []
 
         self.resource_busy_time = {
             "barista": 0.0,
             "scooper": 0.0,
             "cashier": 0.0,
             "waiter": 0.0,
+            "toppings_staff": 0.0
         }
 
     # Add wait times
@@ -34,4 +36,16 @@ class Stats:
         if not self.scooper_waits:
             return 0.0
         return np.percentile(self.scooper_waits, 95)
+    
+    def reset(self):
+        """Reset all KPI-related statistics after warm-up."""
+        self.total_customers = 0
+        self.abandoned_customers = 0
+
+        self.cashier_waits.clear()
+        self.scooper_waits.clear()
+
+        for k in self.resource_busy_time:
+            self.resource_busy_time[k] = 0.0
+
 

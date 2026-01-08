@@ -22,10 +22,40 @@ class ArrivalProcess:
         return random.expovariate(1 / mean)
 
     def run(self):
-        """SimPy process that generates arriving customers."""
+        """SimPy process that generates arriving customers,
+        respecting store opening hours."""
         while True:
+            now = self.env.now
+            time_of_day = now % (24 * 60)
+
+            # ----------------------------------
+            # Αν είμαστε εκτός ωραρίου
+            # ----------------------------------
+            if (
+                time_of_day < self.config.time.OPEN_TIME
+                or time_of_day >= self.config.time.CLOSE_TIME
+            ):
+                # υπολόγισε πότε ανοίγει ξανά
+                if time_of_day < self.config.time.OPEN_TIME:
+                    next_open = self.config.time.OPEN_TIME
+                else:
+                    # επόμενη μέρα
+                    next_open = 24 * 60 + self.config.time.OPEN_TIME
+
+                wait_time = next_open - time_of_day
+                yield self.env.timeout(wait_time)
+                continue
+
+            # ----------------------------------
+            # Εντός ωραρίου → κανονική άφιξη
+            # ----------------------------------
             interarrival = self.get_interarrival_time()
             yield self.env.timeout(interarrival)
+
+            # Μπορεί να περάσαμε εκτός ωραρίου ενδιάμεσα
+            time_of_day = self.env.now % (24 * 60)
+            if time_of_day >= self.config.time.CLOSE_TIME:
+                continue
 
             self.customer_id += 1
             self.stats.total_customers += 1

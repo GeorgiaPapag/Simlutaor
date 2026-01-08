@@ -1,8 +1,6 @@
 import random
 
-# --------------------------------------------------
 # Mapping σταδίων -> (resource_name, service_time_key)
-# --------------------------------------------------
 STAGE_RESOURCES = {
     "ice_cream": ("scooper", "ICE_CREAM_PER_SCOOP"),
     "toppings": ("toppings_staff", "TOPPINGS"),  # με βοήθεια scooper
@@ -89,20 +87,13 @@ class CustomerProcess:
                     weights=list(scoops_probs.values())
                     )[0]
 
-                # time_params = (mean, std) per scoop
-                mean, std = time_params
-                per_scoop = max(0.0, random.gauss(mean, std))
+                # time_params
+                per_scoop = self.sample_time(
+                    self.config.service_times.ICE_CREAM_PER_SCOOP
+                )
                 service_time = scoops * per_scoop
             else:
-                # γενικός χειρισμός tuple
-                if isinstance(time_params, tuple) and len(time_params) == 2:
-                    a, b = time_params
-                    # Δεν ξέρουμε εδώ αν είναι (min,max) ή (mean,std) — εσύ το κρατάς ως tuple.
-                    # Ακολουθούμε την προσέγγιση που είχες: gauss για (mean,std).
-                    # Αν θες uniform για (min,max), το αλλάζουμε μετά με σαφή κανόνα ανά stage.
-                    service_time = max(0.0, random.gauss(a, b))
-                else:
-                    service_time = max(0.0, float(time_params))
+                service_time = self.sample_time(time_params)
 
             yield self.env.timeout(service_time)
 
@@ -113,22 +104,19 @@ class CustomerProcess:
 
         return True
     
-    def sample_time(self, param):
+    def sample_time(self, spec):
         """
-        param is either (min,max) for uniform or (mean,std) for normal
+        spec: DistSpec από SimConfig
         """
-        a, b = param
-        # SERVING είναι uniform στο config, ORDER επίσης uniform
-        # PAYMENT/CONSUMPTION είναι normal στο config (mean,std)
-        # Εμείς δεν ξεχωρίζουμε με tag, απλά εφαρμόζουμε:
-        # - αν θες 100% σωστό: θα το κάνουμε μετά με flags.
-        # Προς το παρόν: χρησιμοποιούμε normal για ό,τι έχει std "λογικό" και uniform για serving/order.
-        return max(0.0, random.gauss(a, b))
+        if spec.dist == "uniform":
+            return random.uniform(spec.a, spec.b)
+        elif spec.dist == "normal":
+            return max(0.0, random.gauss(spec.a, spec.b)) #κόβουμε τις αρνητικές τιμές
+        else:
+            raise ValueError(f"Unknown distribution {spec.dist}")
 
 
-    # --------------------------------------------------
     # Initial product choice (uses INITIAL_ORDER_PROBS)
-    # --------------------------------------------------
     def choose_initial_product(self) -> str:
         probs = self.config.order_choices.INITIAL_ORDER_PROBS
         return random.choices(
@@ -136,16 +124,30 @@ class CustomerProcess:
             weights=list(probs.values())
         )[0]
 
-    # --------------------------------------------------
     # Continuation decision (handles waffle special rule)
-    # --------------------------------------------------
+    # def choose_next_stage(self, stage: str, came_from_waffle: bool) -> str:
+    #     # Αν ΜΟΛΙΣ τελείωσε βάφλα -> 100% πάει σε παγωτό
+    #     if stage == "waffle":
+    #         return "ice_cream"
+
+    #     # Αν το τρέχον στάδιο είναι παγωτό και ΠΡΟΗΓΟΥΜΕΝΟ ήταν βάφλα,
+    #     # τότε αλλάζει το routing: 45% toppings, 55% pay
+    #     if stage == "ice_cream" and came_from_waffle:
+    #         probs = self.config.continuations.CONTINUATION_PROBS["ice_cream_after_waffle"]
+    #     else:
+    #         probs = self.config.continuations.CONTINUATION_PROBS[stage]
+
+    #     return random.choices(
+    #         population=list(probs.keys()),
+    #         weights=list(probs.values())
+    #     )[0]
+
     def choose_next_stage(self, stage: str, came_from_waffle: bool) -> str:
         # Αν ΜΟΛΙΣ τελείωσε βάφλα -> 100% πάει σε παγωτό
         if stage == "waffle":
             return "ice_cream"
 
-        # Αν το τρέχον στάδιο είναι παγωτό και ΠΡΟΗΓΟΥΜΕΝΟ ήταν βάφλα,
-        # τότε αλλάζει το routing: 45% toppings, 55% pay
+        # Αν το τρέχον στάδιο είναι παγωτό και ΠΡΟΗΓΟΥΜΕΝΟ ήταν βάφλα
         if stage == "ice_cream" and came_from_waffle:
             probs = self.config.continuations.CONTINUATION_PROBS["ice_cream_after_waffle"]
         else:
@@ -155,61 +157,119 @@ class CustomerProcess:
             population=list(probs.keys()),
             weights=list(probs.values())
         )[0]
+
     
+    # def process_toppings_with_help(self, customer):
+        # """
+        # Toppings can be processed either by:
+        # - toppings_staff (primary)
+        # - scooper (helper)
+        # """
+
+        # print(
+        #     f"{self.env.now:.2f} | "
+        #     f"DEBUG toppings entry: "
+        #     f"toppings_staff busy={self.resources.toppings_staff.count} queue={len(self.resources.toppings_staff.queue)} | "
+        #     f"scooper busy={self.resources.scooper.count} queue={len(self.resources.scooper.queue)}"
+        # )
+
+        # start_wait = self.env.now
+
+        # toppings_req = self.resources.toppings_staff.request()
+        # scooper_req = self.resources.scooper.request()
+
+        # result = yield (
+        #     toppings_req |
+        #     scooper_req |
+        #     self.env.timeout(self.config.waiting_rules.MAX_QUEUE_WAIT)
+        # )
+
+        # # Abandonment
+        # if not result:
+        #     self.stats.abandoned_customers += 1
+        #     self.stats.toppings_waits.append(
+        #         self.config.waiting_rules.MAX_QUEUE_WAIT
+        #     )
+        #     return False
+
+        # if toppings_req in result:
+        #     server = "toppings_staff"
+        #     yield toppings_req
+        #     scooper_req.cancel()
+
+        # elif scooper_req in result:
+        #     server = "scooper"
+        #     yield scooper_req
+        #     toppings_req.cancel()
+
+        # else:
+        #     return False
+        
+        # wait_time = self.env.now - start_wait
+        # self.stats.toppings_waits.append(wait_time)
+
+
+        # # Service time
+        # service_time = self.sample_time(self.config.service_times.TOPPINGS)
+        # yield self.env.timeout(service_time)
+
+        # # ---- resource utilization (toppings help) ----
+        # if server in self.stats.resource_busy_time:
+        #     self.stats.resource_busy_time[server] += service_time
+
+        # print(f"{self.env.now:.2f} | Toppings served by {server}")
+
+        # return True
+
     def process_toppings_with_help(self, customer):
         """
-        Toppings can be processed either by:
-        - toppings_staff (primary)
-        - scooper (helper)
+        Toppings:
+        - primary: toppings_staff
+        - helper: scooper (ONLY if immediately free)
         """
 
-        print(
-            f"{self.env.now:.2f} | "
-            f"DEBUG toppings entry: "
-            f"toppings_staff busy={self.resources.toppings_staff.count} queue={len(self.resources.toppings_staff.queue)} | "
-            f"scooper busy={self.resources.scooper.count} queue={len(self.resources.scooper.queue)}"
-        )
+        start_wait = self.env.now
 
-        toppings_req = self.resources.toppings_staff.request()
-        scooper_req = self.resources.scooper.request()
+        # 🔹 Πρώτα ελέγχουμε αν ο scooper είναι ΑΜΕΣΑ διαθέσιμος
+        if self.resources.scooper.count < self.resources.scooper.capacity:
+            # Scooper βοηθάει ΑΜΕΣΑ (χωρίς αναμονή)
+            with self.resources.scooper.request(priority=1) as req:
+                yield req
 
-        result = yield (
-            toppings_req |
-            scooper_req |
-            self.env.timeout(self.config.waiting_rules.MAX_QUEUE_WAIT)
-        )
+                wait_time = self.env.now - start_wait
+                self.stats.toppings_waits.append(wait_time)
 
-        # Abandonment
-        if result == {}:
-            self.stats.abandoned_customers += 1 # abandon stat
-            return False
+                service_time = self.sample_time(self.config.service_times.TOPPINGS)
+                yield self.env.timeout(service_time)
 
-        if toppings_req in result:
-            server = "toppings_staff"
-            yield toppings_req
-            scooper_req.cancel()
+                self.stats.resource_busy_time["scooper"] += service_time
 
-        elif scooper_req in result:
-            server = "scooper"
-            yield scooper_req
-            toppings_req.cancel()
+                print(f"{self.env.now:.2f} | Toppings served by scooper")
+                return True
 
-        else:
-            return False
+        # 🔹 Αλλιώς: κανονική ουρά toppings_staff
+        with self.resources.toppings_staff.request() as req:
+            result = yield req | self.env.timeout(self.config.waiting_rules.MAX_QUEUE_WAIT)
 
-        # Service time
-        service_time = self.config.service_times.TOPPINGS
-        if isinstance(service_time, tuple):
-            service_time = random.uniform(*service_time)
+            if req not in result:
+                self.stats.abandoned_customers += 1
+                self.stats.toppings_waits.append(
+                    self.config.waiting_rules.MAX_QUEUE_WAIT
+                )
+                return False
 
-        yield self.env.timeout(service_time)
+            wait_time = self.env.now - start_wait
+            self.stats.toppings_waits.append(wait_time)
 
-        print(f"{self.env.now:.2f} | Toppings served by {server}")
+            service_time = self.sample_time(self.config.service_times.TOPPINGS)
+            yield self.env.timeout(service_time)
 
+            self.stats.resource_busy_time["toppings_staff"] += service_time
+
+            print(f"{self.env.now:.2f} | Toppings served by toppings_staff")
         return True
 
-    # Main customer flow
-    # --------------------------------------------------
+   # Main customer flow
     def run(self, customer):
         print(f"{self.env.now:.2f} | Customer {customer.id} started")
         
@@ -226,12 +286,9 @@ class CustomerProcess:
             # calculate time
             self.stats.add_cashier_wait(self.env.now - start_wait_cashier)
 
-            order_min, order_max = self.config.service_times.ORDER
-            # yield self.env.timeout(random.uniform(order_min, order_max))
+            service_time = self.sample_time(self.config.service_times.ORDER)
             # utilization
-            service_time = random.uniform(order_min, order_max)
             yield self.env.timeout(service_time)
-
             self.stats.resource_busy_time["cashier"] += service_time
             
         print(f"{self.env.now:.2f} | Customer {customer.id} ordered")
@@ -288,8 +345,8 @@ class CustomerProcess:
                 # μόλις χρησιμοποιήθηκε (ή δεν ισχύει), το μηδενίζουμε
                 next_icecream_is_after_waffle = False
 
-            if next_stage == "pay":
-                break
+            # if next_stage == "pay":
+            #     break
 
             previous_stage = current_stage
             current_stage = next_stage
@@ -313,29 +370,33 @@ class CustomerProcess:
                     # Σερβίρισμα από σερβιτόρο
                     with self.resources.waiter.request() as w_req:
                         yield w_req
-                        serve_min, serve_max = self.config.service_times.SERVING
-                        # yield self.env.timeout(random.uniform(serve_min, serve_max))
-                        # utilization
-                        serve_time = random.uniform(serve_min, serve_max)
+                        serve_time = self.sample_time(self.config.service_times.SERVING)
                         yield self.env.timeout(serve_time)
-
+                        # yield self.env.timeout(random.uniform(serve_min, serve_max))
+                        # # utilization
+                        # serve_timecons_mean, cons_std = self.config.service_times.CONSUMPTION
                         self.stats.resource_busy_time["waiter"] += serve_time
 
                         print(f"{self.env.now:.2f} | Customer {customer.id} served")
 
                     # Κατανάλωση (χωρίς πόρο)
-                    cons_mean, cons_std = self.config.service_times.CONSUMPTION
-                    yield self.env.timeout(max(0, random.gauss(cons_mean, cons_std)))
+                    # cons_mean, cons_std = self.config.service_times.CONSUMPTION
+                    # yield self.env.timeout(max(0, random.gauss(cons_mean, cons_std)))
+                    cons_time = self.sample_time(self.config.service_times.CONSUMPTION)
+                    yield self.env.timeout(cons_time)
+
                     print(f"{self.env.now:.2f} | Customer {customer.id} finished consumption")
 
                     # Τακτοποίηση τραπεζιού από σερβιτόρο
                     with self.resources.waiter.request() as w_req:
                         yield w_req
-                        clean_min, clean_max = self.config.service_times.TABLE_CLEANING
-                        #yield self.env.timeout(random.uniform(clean_min, clean_max))
-                        # utilization
-                        clean_time = random.uniform(clean_min, clean_max)
+                        clean_time = self.sample_time(self.config.service_times.TABLE_CLEANING)
                         yield self.env.timeout(clean_time)
+                        # clean_min, clean_max = self.config.service_times.TABLE_CLEANING
+                        # #yield self.env.timeout(random.uniform(clean_min, clean_max))
+                        # # utilization
+                        # clean_time = random.uniform(clean_min, clean_max)
+                        # yield self.env.timeout(clean_time)
 
                         self.stats.resource_busy_time["waiter"] += clean_time
 
@@ -349,11 +410,12 @@ class CustomerProcess:
         with self.resources.cashier.request(priority=1) as req:
             print(f"{self.env.now:.2f} | Customer {customer.id} paying")
             yield req
+            pay_time = self.sample_time(self.config.service_times.PAYMENT)
 
-            pay_min, pay_max = self.config.service_times.PAYMENT
-            # yield self.env.timeout(random.uniform(pay_min, pay_max))
-            # utilization
-            pay_time = random.uniform(pay_min, pay_max)
+            # pay_min, pay_max = self.config.service_times.PAYMENT
+            # # yield self.env.timeout(random.uniform(pay_min, pay_max))
+            # # utilization
+            # pay_time = random.uniform(pay_min, pay_max)
             yield self.env.timeout(pay_time)
 
             self.stats.resource_busy_time["cashier"] += pay_time
