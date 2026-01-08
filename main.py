@@ -58,7 +58,7 @@ def main():
 
     scooper_p95 = stats.p95_scooper_wait()
     print(
-        "Cashier constraint (<5'): ",
+        "Scooper constraint (<5'): ",
         scooper_p95, "=", "OK" if scooper_p95 < 5 else "VIOLATED"
     )
 
