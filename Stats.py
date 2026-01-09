@@ -44,6 +44,7 @@ class Stats:
 
         self.cashier_waits.clear()
         self.scooper_waits.clear()
+        self.toppings_waits.clear()
 
         for k in self.resource_busy_time:
             self.resource_busy_time[k] = 0.0
