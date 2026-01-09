@@ -1,43 +1,139 @@
+# import simpy
+# from SimConfig import SimulationConfig, SimTimeConfig
+# from Resources import Resources
+# from ArrivalProcess import ArrivalProcess
+# from CustomerProcess import CustomerProcess
+# from Stats import Stats
+# import numpy as np
+
+# def main():
+#     env = simpy.Environment()
+#     config = SimulationConfig()
+#     stats = Stats()
+
+#     resources = Resources(env, config)
+#     customer_process = CustomerProcess(env, resources, config, stats)
+#     arrival_process = ArrivalProcess(env, config, customer_process, stats)
+
+#     # Χρονικές παράμετροι από config
+#     WARM_UP_END = config.time.OPEN_TIME + config.time.WARM_UP_TIME # ξεκινά να μετράω μετά το τέλος του warm up time που είναι 60 λεπτά μετά το άνοιγμα
+#     DAYS = config.time.RUN_LENGTH_DAYS
+
+#     TOTAL_TIME = DAYS * 24 * 60
+#     STEADY_TIME = TOTAL_TIME - WARM_UP_END
+
+
+#     # Ξεκινάει η διαδικασία αφίξεων
+#     env.process(arrival_process.run())
+
+#     # 1️⃣ Warm-up period
+#     env.run(until=WARM_UP_END)
+
+#     # Reset στατιστικών (όχι πόρων / ουρών)
+#     stats.reset()
+
+#     # 2️⃣ Κύρια προσομοίωση (steady state)
+#     env.run(until=TOTAL_TIME)
+    
+#     print("cashier_waits samples:", stats.cashier_waits[:5])
+#     print("scooper_waits samples:", stats.scooper_waits[:5])
+
+#     print("---- STATS ----")
+#     print("Total customers:", stats.total_customers)
+#     print("Abandoned customers:", stats.abandoned_customers)
+
+#     print("---- PERFORMANCE METRICS ----")
+#     print("Total customers:", stats.total_customers)
+#     print("Abandonment rate:",
+#         stats.abandoned_customers / stats.total_customers)
+
+#     cashier_p95 = stats.p95_cashier_wait()
+#     print(
+#         "Cashier constraint (<6'): ",
+#         cashier_p95, "=","OK" if cashier_p95 < 6 else "VIOLATED"
+#     )
+
+#     scooper_p95 = stats.p95_scooper_wait()
+#     print(
+#         "Scooper constraint (<5'): ",
+#         scooper_p95, "=", "OK" if scooper_p95 < 5 else "VIOLATED"
+#     )
+
+#     SIM_TIME = STEADY_TIME
+
+#     print("---- UTILIZATION ----")
+#     for res, busy in stats.resource_busy_time.items():
+#         utilization = busy / SIM_TIME
+#         print(
+#             f"{res}: {utilization:.2%}",
+#             "OK" if 0.70 <= utilization <= 0.85 else "⚠️"
+#         )
+
+    
+# if __name__ == "__main__":
+#     main()
+
+
+
 import simpy
+
 from SimConfig import SimulationConfig, SimTimeConfig
 from Resources import Resources
+from Stats import Stats
 from ArrivalProcess import ArrivalProcess
 from CustomerProcess import CustomerProcess
-from Stats import Stats
-import numpy as np
+import random
+
 
 def main():
-    env = simpy.Environment()
+    random.seed(42)
+
     config = SimulationConfig()
+
+    DAYS = config.time.RUN_LENGTH_DAYS
+    DAY_LENGTH = 24 * 60                 # ημερολογιακή μέρα
+    OPEN_TIME = config.time.OPEN_TIME
+    WARM_UP = config.time.WARM_UP_TIME   # σε λεπτά
+
     stats = Stats()
 
-    resources = Resources(env, config)
-    customer_process = CustomerProcess(env, resources, config, stats)
-    arrival_process = ArrivalProcess(env, config, customer_process, stats)
+    for day in range(DAYS):
+        print(f"\n===== DAY {day + 1} =====")
 
-    # Χρονικές παράμετροι από config
-    WARM_UP = config.time.WARM_UP_TIME
-    DAYS = config.time.RUN_LENGTH_DAYS
-    DAY_LENGTH = config.time.DAY_LENGTH
+        env = simpy.Environment()
 
-    TOTAL_TIME = config.time.RUN_LENGTH_DAYS * 24 * 60
-    STEADY_TIME = TOTAL_TIME - config.time.WARM_UP_TIME
+        resources = Resources(env, config)
+        customer_process = CustomerProcess(env, resources, config, stats)
+        arrival_process = ArrivalProcess(env, config, customer_process, stats)
 
+        env.process(arrival_process.run())
 
-    # Ξεκινάει η διαδικασία αφίξεων
-    env.process(arrival_process.run())
+        # -------------------------
+        # 1️⃣ ΜΟΝΟ ΤΗΝ ΠΡΩΤΗ ΜΕΡΑ: warm-up σε λεπτά
+        # -------------------------
+        if day == 0 and WARM_UP > 0:
+            warm_up_end = OPEN_TIME + WARM_UP
 
-    last_time = 0.0
+            # τρέχουμε μέχρι να τελειώσει το warm-up
+            env.run(until=warm_up_end)
 
-    # 1️⃣ Warm-up period
-    env.run(until=WARM_UP)
+            # μηδενίζουμε ΜΟΝΟ stats
+            stats.reset()
 
-    # Reset στατιστικών (όχι πόρων / ουρών)
-    stats.reset()
+            # συνεχίζουμε την ίδια μέρα μέχρι τα 24h
+            env.run(until=DAY_LENGTH)
 
-    # 2️⃣ Κύρια προσομοίωση (steady state)
-    env.run(until=TOTAL_TIME)
-    
+        else:
+            # -------------------------
+            # 2️⃣ Κανονική steady-state μέρα
+            # -------------------------
+            env.run(until=DAY_LENGTH)
+
+    # -------------------------
+    # Τελική αναφορά
+
+    steady_time = (DAYS * DAY_LENGTH) - (OPEN_TIME + WARM_UP)
+
     print("cashier_waits samples:", stats.cashier_waits[:5])
     print("scooper_waits samples:", stats.scooper_waits[:5])
 
@@ -62,7 +158,7 @@ def main():
         scooper_p95, "=", "OK" if scooper_p95 < 5 else "VIOLATED"
     )
 
-    SIM_TIME = STEADY_TIME
+    SIM_TIME = steady_time
 
     print("---- UTILIZATION ----")
     for res, busy in stats.resource_busy_time.items():
@@ -72,8 +168,7 @@ def main():
             "OK" if 0.70 <= utilization <= 0.85 else "⚠️"
         )
 
-    
+
 if __name__ == "__main__":
     main()
-
 
