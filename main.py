@@ -93,6 +93,7 @@ def main():
     DAYS = config.time.RUN_LENGTH_DAYS
     DAY_LENGTH = 24 * 60                 # ημερολογιακή μέρα
     OPEN_TIME = config.time.OPEN_TIME
+    CLOSE_TIME = config.time.CLOSE_TIME
     WARM_UP = config.time.WARM_UP_TIME   # σε λεπτά
 
     stats = Stats()
@@ -121,13 +122,13 @@ def main():
             stats.reset()
 
             # συνεχίζουμε την ίδια μέρα μέχρι τα 24h
-            env.run(until=DAY_LENGTH)
+            env.run(until=CLOSE_TIME)
 
         else:
             # -------------------------
             # 2️⃣ Κανονική steady-state μέρα
             # -------------------------
-            env.run(until=DAY_LENGTH)
+            env.run(until=CLOSE_TIME)
 
     # -------------------------
     # Τελική αναφορά
@@ -158,15 +159,27 @@ def main():
         scooper_p95, "=", "OK" if scooper_p95 < 5 else "VIOLATED"
     )
 
-    SIM_TIME = steady_time
+    # SIM_TIME = steady_time
+
+    # print("---- UTILIZATION ----")
+    # for res, busy in stats.resource_busy_time.items():
+    #     utilization = busy / SIM_TIME
+    #     print(
+    #         f"{res}: {utilization:.2%}",
+    #         "OK" if 0.70 <= utilization <= 0.85 else "⚠️"
+    #     )
+
+    OPEN_MINUTES_PER_DAY = CLOSE_TIME - OPEN_TIME
+    steady_time = (OPEN_MINUTES_PER_DAY * DAYS) - WARM_UP
 
     print("---- UTILIZATION ----")
     for res, busy in stats.resource_busy_time.items():
-        utilization = busy / SIM_TIME
+        utilization = busy / steady_time
         print(
             f"{res}: {utilization:.2%}",
             "OK" if 0.70 <= utilization <= 0.85 else "⚠️"
         )
+
 
 
 if __name__ == "__main__":
