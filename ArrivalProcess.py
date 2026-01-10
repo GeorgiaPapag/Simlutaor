@@ -10,6 +10,11 @@ class ArrivalProcess:
         self.stats = stats
         self.customer_id = 0
 
+        self.store_open = self.env.event()
+        self.store_open.succeed()  # αρχικά ανοιχτό (θα κλείσει στο πρώτο CLOSE)
+        self.customer_process.store_open = self.store_open
+
+
     def get_interarrival_time(self) -> float:
         """Return next interarrival time based on peak / off-peak hours."""
         current_time = self.env.now % (24 * 60)
@@ -31,6 +36,7 @@ class ArrivalProcess:
             # ----------------------------------
             # Αν είμαστε εκτός ωραρίου
             # ----------------------------------
+            
             if (
                 time_of_day < self.config.time.OPEN_TIME
                 or time_of_day >= self.config.time.CLOSE_TIME
@@ -43,7 +49,17 @@ class ArrivalProcess:
                     next_open = 24 * 60 + self.config.time.OPEN_TIME
 
                 wait_time = next_open - time_of_day
+
+                # ΚΛΕΙΣΙΜΟ ΚΑΤΑΣΤΗΜΑΤΟΣ (μόνο αν δεν είναι ήδη κλειστό)
+                if self.store_open.triggered:
+                    self.store_open = self.env.event()
+                    self.customer_process.store_open = self.store_open
+
+
                 yield self.env.timeout(wait_time)
+                # ΑΝΟΙΓΜΑ ΚΑΤΑΣΤΗΜΑΤΟΣ
+                self.store_open.succeed()
+
                 continue
 
             # ----------------------------------
