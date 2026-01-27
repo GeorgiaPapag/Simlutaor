@@ -208,12 +208,36 @@ def run_one_replication(seed: int):
     for res, busy in stats.resource_busy_time.items():
         utilizations[res] = (busy / steady_time) if steady_time > 0 else 0.0
 
+    # ---- Tables KPIs ----
+    table_mean_wait = float(np.mean(stats.table_waits)) if stats.table_waits else 0.0
+    table_p95_wait  = float(np.percentile(stats.table_waits, 95)) if stats.table_waits else 0.0
+    table_timeout_rate = (stats.table_timeouts_to_takeaway / stats.table_seekers) if stats.table_seekers > 0 else 0.0
+
+    print("table_waits count:", len(stats.table_waits))
+    print("table_waits >0:", sum(1 for w in stats.table_waits if w > 0))
+
+    nonzero_waits = [w for w in stats.table_waits if w > 0]
+    table_mean_wait_nonzero = float(np.mean(nonzero_waits)) if nonzero_waits else 0.0
+    share_waiting = (len(nonzero_waits) / len(stats.table_waits)) if stats.table_waits else 0.0
+
+
     return {
         "abandonment_rate": abandonment_rate,
         "cashier_p95": cashier_p95,
         "scooper_p95": scooper_p95,
         "utilizations": utilizations,
         "total_customers": total,
+
+        # NEW
+        "table_mean_wait": table_mean_wait,
+        "table_p95_wait": table_p95_wait,
+        "table_timeout_rate": table_timeout_rate,
+        "table_seekers": stats.table_seekers,
+        "table_timeouts_to_takeaway": stats.table_timeouts_to_takeaway,
+
+        "table_mean_wait_nonzero": table_mean_wait_nonzero,
+        "table_share_waiting": share_waiting,
+
     }
 
 
@@ -249,6 +273,41 @@ def main():
     scooper_p95s = [r["scooper_p95"] for r in reps]
     m, lo, hi = mean_ci_95(scooper_p95s)
     print(f"Scooper p95 wait (min): mean={m:.3f} | 95% CI [{lo:.3f}, {hi:.3f}]")
+
+    # ---- Tables KPIs + CI ----
+    table_mean = [r["table_mean_wait"] for r in reps]
+    m, lo, hi = mean_ci_95(table_mean)
+    print(f"Table mean wait (min): mean={m:.3f} | 95% CI [{lo:.3f}, {hi:.3f}]")
+
+    table_p95 = [r["table_p95_wait"] for r in reps]
+    m, lo, hi = mean_ci_95(table_p95)
+    print(f"Table p95 wait (min): mean={m:.3f} | 95% CI [{lo:.3f}, {hi:.3f}]")
+
+    timeout_rate = [r["table_timeout_rate"] for r in reps]
+    m, lo, hi = mean_ci_95(timeout_rate)
+    print(f"Table->takeaway (no table within 5'): mean={m:.2%} | 95% CI [{lo:.2%}, {hi:.2%}]")
+
+    # (counts, χωρίς CI αν δεν θες)
+    seekers = [r["table_seekers"] for r in reps]
+    m, lo, hi = mean_ci_95(seekers)
+    print(f"Table seekers per run: mean={m:.1f} | 95% CI [{lo:.1f}, {hi:.1f}]")
+
+    timeouts = [r["table_timeouts_to_takeaway"] for r in reps]
+    m, lo, hi = mean_ci_95(timeouts)
+    print(f"Table timeouts->takeaway per run: mean={m:.1f} | 95% CI [{lo:.1f}, {hi:.1f}]")
+
+    avg_seekers_per_run = np.mean([r["table_seekers"] for r in reps])
+    print(f"Avg table seekers per run (14 days): {avg_seekers_per_run:.1f}")
+    print(f"Avg table seekers per day: {avg_seekers_per_run/14:.1f}")
+
+    avg_table_wait = np.mean([r["table_mean_wait"] for r in reps])
+    print(f"Avg table wait (all seekers, includes 0s): {avg_table_wait:.3f} min")
+
+    avg_table_wait_nz = np.mean([r["table_mean_wait_nonzero"] for r in reps])
+    avg_share_waiting = np.mean([r["table_share_waiting"] for r in reps])
+    print(f"% who waited (>0): {avg_share_waiting:.2%}")
+    print(f"Avg table wait (only those who waited): {avg_table_wait_nz:.3f} min")
+
 
     # Utilization CI per resource
     # (take resource names from first replication)

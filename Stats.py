@@ -9,6 +9,14 @@ class Stats:
         self.scooper_waits = []
         self.toppings_waits = []
 
+        # --- NEW: tables ---
+        self.table_seekers = 0              # πόσοι ζήτησαν τραπέζι
+        self.table_waits = []               # χρόνος αναμονής για τραπέζι
+        self.table_timeouts_to_takeaway = 0 # πόσοι δεν βρήκαν σε 5' και έγιναν πακέτο
+
+        # --- NEW: queue length samples for tables (optional monitor) ---
+        self.table_queue_len_samples = []   # δείγματα μήκους ουράς (len(resource.queue))
+
         self.resource_busy_time = {
             "barista": 0.0,
             "scooper": 0.0,
@@ -45,6 +53,12 @@ class Stats:
         self.cashier_waits.clear()
         self.scooper_waits.clear()
         self.toppings_waits.clear()
+
+        # --- NEW reset for tables ---
+        self.table_seekers = 0
+        self.table_waits.clear()
+        self.table_timeouts_to_takeaway = 0
+        self.table_queue_len_samples.clear()
 
         for k in self.resource_busy_time:
             self.resource_busy_time[k] = 0.0

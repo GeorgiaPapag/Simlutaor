@@ -357,7 +357,12 @@ class CustomerProcess:
         # -------------------------
         if customer.is_seated:
             # print(f"{self.env.now:.2f} | Customer {customer.id} wants table")
-             # 1️⃣ Αναμονή για τραπέζι (μέχρι 5')
+            
+            # Μετράμε ότι ζήτησε τραπέζι
+            self.stats.table_seekers += 1
+            start_wait_table = self.env.now
+
+             # Αναμονή για τραπέζι (μέχρι 5')
             with self.resources.tables.request() as table_req:
                 result = yield table_req | self.env.timeout(
                     self.config.waiting_rules.MAX_TABLE_WAIT
@@ -365,8 +370,14 @@ class CustomerProcess:
 
                 if table_req not in result:
                     # δεν βρήκε τραπέζι → γίνεται πακέτο
+                    self.stats.table_waits.append(self.config.waiting_rules.MAX_TABLE_WAIT)
+                    self.stats.table_timeouts_to_takeaway += 1
                     customer.is_seated = False
                 else:
+                    self.stats.table_waits.append(self.env.now - start_wait_table)
+                    if self.env.now - start_wait_table > 0:
+                        print("table wait:", self.env.now - start_wait_table)
+                        
                     # Σερβίρισμα από σερβιτόρο
                     with self.resources.waiter.request() as w_req:
                         yield w_req
