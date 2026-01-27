@@ -27,8 +27,8 @@ class CustomerProcess:
         if stage == "toppings":
          return (yield from self.process_toppings_with_help(customer))
         
-        if stage in ("coffee", "milkshake"):
-            print(f"{self.env.now:.2f} | Barista busy with {stage}")
+        # if stage in ("coffee", "milkshake"):
+        #     print(f"{self.env.now:.2f} | Barista busy with {stage}")
 
         if stage not in STAGE_RESOURCES:
             raise KeyError(f"Unknown stage '{stage}'. Add it to STAGE_RESOURCES.")
@@ -47,10 +47,10 @@ class CustomerProcess:
         if stage == "coffee" and customer.previous_stage == "ice_cream":
             priority = 0
         
-        print(
-            f"{self.env.now:.2f} | DEBUG priority: "
-            f"cust={customer.id}, stage={stage}, prev={customer.previous_stage}, priority={priority}"
-        )
+        # print(
+        #     f"{self.env.now:.2f} | DEBUG priority: "
+        #     f"cust={customer.id}, stage={stage}, prev={customer.previous_stage}, priority={priority}"
+        # )
 
         start_wait_scooping = None
 
@@ -244,7 +244,7 @@ class CustomerProcess:
 
                 self.stats.resource_busy_time["scooper"] += service_time
 
-                print(f"{self.env.now:.2f} | Toppings served by scooper")
+                # print(f"{self.env.now:.2f} | Toppings served by scooper")
                 return True
 
         # 🔹 Αλλιώς: κανονική ουρά toppings_staff
@@ -266,12 +266,12 @@ class CustomerProcess:
 
             self.stats.resource_busy_time["toppings_staff"] += service_time
 
-            print(f"{self.env.now:.2f} | Toppings served by toppings_staff")
+            # print(f"{self.env.now:.2f} | Toppings served by toppings_staff")
         return True
 
    # Main customer flow
     def run(self, customer):
-        print(f"{self.env.now:.2f} | Customer {customer.id} started")
+        # print(f"{self.env.now:.2f} | Customer {customer.id} started")
         
         # start time
         start_wait_cashier = self.env.now
@@ -291,14 +291,14 @@ class CustomerProcess:
             yield self.env.timeout(service_time)
             self.stats.resource_busy_time["cashier"] += service_time
             
-        print(f"{self.env.now:.2f} | Customer {customer.id} ordered")
+        # print(f"{self.env.now:.2f} | Customer {customer.id} ordered")
 
         # ---- Initial product ----
         current_stage = self.choose_initial_product()
-        print(
-            f"{self.env.now:.2f} | "
-            f"Customer {customer.id} initial product = {current_stage}"
-        )
+        # print(
+        #     f"{self.env.now:.2f} | "
+        #     f"Customer {customer.id} initial product = {current_stage}"
+        # )
 
         # flag: αν το παγωτό που έρχεται είναι "μετά από βάφλα"
         next_icecream_is_after_waffle = False
@@ -310,18 +310,18 @@ class CustomerProcess:
 
         # ---- Loop of stages ----
         while True:
-            print(
-                f"{self.env.now:.2f} | "
-                f"Customer {customer.id} enters stage {current_stage}"
-            )
+            # print(
+            #     f"{self.env.now:.2f} | "
+            #     f"Customer {customer.id} enters stage {current_stage}"
+            # )
 
             ok = yield from self.process_stage(customer, current_stage)
 
             if not ok:
-                print(
-                    f"{self.env.now:.2f} | "
-                    f"Customer {customer.id} abandoned at {current_stage}"
-                )
+                # print(
+                #     f"{self.env.now:.2f} | "
+                #     f"Customer {customer.id} abandoned at {current_stage}"
+                # )
                 return  # abandon
 
             # customer.is_continuation = True
@@ -332,10 +332,10 @@ class CustomerProcess:
             next_stage = self.choose_next_stage(current_stage, came_from_waffle)
 
             if next_stage == "pay":
-                print(
-                    f"{self.env.now:.2f} | "
-                    f"Customer {customer.id} finished (go to pay)"
-                )
+                # print(
+                #     f"{self.env.now:.2f} | "
+                #     f"Customer {customer.id} finished (go to pay)"
+                # )
                 break
             
             # ενημέρωση flag για τον επόμενο γύρο
@@ -356,7 +356,7 @@ class CustomerProcess:
         # Seated vs Takeaway
         # -------------------------
         if customer.is_seated:
-            print(f"{self.env.now:.2f} | Customer {customer.id} wants table")
+            # print(f"{self.env.now:.2f} | Customer {customer.id} wants table")
              # 1️⃣ Αναμονή για τραπέζι (μέχρι 5')
             with self.resources.tables.request() as table_req:
                 result = yield table_req | self.env.timeout(
@@ -377,7 +377,7 @@ class CustomerProcess:
                         # serve_timecons_mean, cons_std = self.config.service_times.CONSUMPTION
                         self.stats.resource_busy_time["waiter"] += serve_time
 
-                        print(f"{self.env.now:.2f} | Customer {customer.id} served")
+                        # print(f"{self.env.now:.2f} | Customer {customer.id} served")
 
                     # Κατανάλωση (χωρίς πόρο)
                     # cons_mean, cons_std = self.config.service_times.CONSUMPTION
@@ -385,7 +385,7 @@ class CustomerProcess:
                     cons_time = self.sample_time(self.config.service_times.CONSUMPTION)
                     yield self.env.timeout(cons_time)
 
-                    print(f"{self.env.now:.2f} | Customer {customer.id} finished consumption")
+                    # print(f"{self.env.now:.2f} | Customer {customer.id} finished consumption")
 
                     # Τακτοποίηση τραπεζιού από σερβιτόρο
                     with self.resources.waiter.request() as w_req:
@@ -401,14 +401,14 @@ class CustomerProcess:
                         self.stats.resource_busy_time["waiter"] += clean_time
 
                     # (table released automatically when leaving "with tables.request()")
-                    print(f"{self.env.now:.2f} | Customer {customer.id} table cleaned")
+                    # print(f"{self.env.now:.2f} | Customer {customer.id} table cleaned")
 
 
         # -------------------------
         # Payment (no abandonment)
         # -------------------------
         with self.resources.cashier.request(priority=1) as req:
-            print(f"{self.env.now:.2f} | Customer {customer.id} paying")
+            # print(f"{self.env.now:.2f} | Customer {customer.id} paying")
             yield req
             pay_time = self.sample_time(self.config.service_times.PAYMENT)
 
@@ -420,5 +420,5 @@ class CustomerProcess:
 
             self.stats.resource_busy_time["cashier"] += pay_time
 
-        print(f"{self.env.now:.2f} | Customer {customer.id} exited system")
+        # print(f"{self.env.now:.2f} | Customer {customer.id} exited system")
         return
