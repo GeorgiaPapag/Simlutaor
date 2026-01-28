@@ -268,6 +268,16 @@ class CustomerProcess:
 
             # print(f"{self.env.now:.2f} | Toppings served by toppings_staff")
         return True
+    
+
+    # ----- διαδικασία καθαρισμού
+    def clean_table_process(self, clean_time: float, customer_id: int):
+        print(f"[{self.env.now:.2f}] Customer {customer_id}: TABLE CLEANING STARTED")
+        with self.resources.waiter.request() as w_req:
+            yield w_req
+            yield self.env.timeout(clean_time)
+            self.stats.resource_busy_time["waiter"] += clean_time
+        print(f"[{self.env.now:.2f}] Customer {customer_id}: TABLE CLEANED → AVAILABLE")
 
    # Main customer flow
     def run(self, customer):
@@ -275,6 +285,7 @@ class CustomerProcess:
         
         # start time
         start_wait_cashier = self.env.now
+        pending_table_clean = None
 
         current_stage = self.choose_initial_product()
         # EXPRESS scenario: small_purchase goes to express cashier and finishes
@@ -398,10 +409,11 @@ class CustomerProcess:
                     self.stats.table_waits.append(self.config.waiting_rules.MAX_TABLE_WAIT)
                     self.stats.table_timeouts_to_takeaway += 1
                     customer.is_seated = False
+                    print(f"[{self.env.now:.2f}] Customer {customer.id}: TABLE OCCUPIED")
                 else:
                     self.stats.table_waits.append(self.env.now - start_wait_table)
-                    if self.env.now - start_wait_table > 0:
-                        print("table wait:", self.env.now - start_wait_table)
+                    # if self.env.now - start_wait_table > 0:
+                    #     print("table wait:", self.env.now - start_wait_table)
 
                     # Σερβίρισμα από σερβιτόρο
                     with self.resources.waiter.request() as w_req:
@@ -421,20 +433,25 @@ class CustomerProcess:
                     cons_time = self.sample_time(self.config.service_times.CONSUMPTION)
                     yield self.env.timeout(cons_time)
 
+                    print(f"[{self.env.now:.2f}] Customer {customer.id}: FINISHED CONSUMPTION (leaves table)")
+
+                    clean_time = self.sample_time(self.config.service_times.TABLE_CLEANING)
+                    pending_table_clean = self.env.process(self.clean_table_process(clean_time, customer.id))
+
                     # print(f"{self.env.now:.2f} | Customer {customer.id} finished consumption")
 
                     # Τακτοποίηση τραπεζιού από σερβιτόρο
-                    with self.resources.waiter.request() as w_req:
-                        yield w_req
-                        clean_time = self.sample_time(self.config.service_times.TABLE_CLEANING)
-                        yield self.env.timeout(clean_time)
-                        # clean_min, clean_max = self.config.service_times.TABLE_CLEANING
-                        # #yield self.env.timeout(random.uniform(clean_min, clean_max))
-                        # # utilization
-                        # clean_time = random.uniform(clean_min, clean_max)
-                        # yield self.env.timeout(clean_time)
+                    # with self.resources.waiter.request() as w_req:
+                    #     yield w_req
+                    #     clean_time = self.sample_time(self.config.service_times.TABLE_CLEANING)
+                    #     yield self.env.timeout(clean_time)
+                    #     # clean_min, clean_max = self.config.service_times.TABLE_CLEANING
+                    #     # #yield self.env.timeout(random.uniform(clean_min, clean_max))
+                    #     # # utilization
+                    #     # clean_time = random.uniform(clean_min, clean_max)
+                    #     # yield self.env.timeout(clean_time)
 
-                        self.stats.resource_busy_time["waiter"] += clean_time
+                    #     self.stats.resource_busy_time["waiter"] += clean_time
 
                     # (table released automatically when leaving "with tables.request()")
                     # print(f"{self.env.now:.2f} | Customer {customer.id} table cleaned")
@@ -443,9 +460,20 @@ class CustomerProcess:
         # -------------------------
         # Payment (no abandonment)
         # -------------------------
+        # print("go pay at", self.env.now)
+        print(f"[{self.env.now:.2f}] Customer {customer.id}: GO PAY (seated={customer.is_seated})")
+
         with self.resources.cashier.request(priority=1) as req:
-            # print(f"{self.env.now:.2f} | Customer {customer.id} paying")
-            yield req
+
+            if pending_table_clean is not None:
+                # περιμένουμε Ο,ΤΙ έρθει πρώτο: cashier ή να τελειώσει το cleaning
+                result = yield req | pending_table_clean
+                # αν τελειώσει πρώτα το cleaning, συνεχίζουμε να περιμένουμε cashier
+                if req not in result:
+                    yield req
+            else:
+                yield req
+
             pay_time = self.sample_time(self.config.service_times.PAYMENT)
 
             # pay_min, pay_max = self.config.service_times.PAYMENT
