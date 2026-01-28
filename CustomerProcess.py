@@ -25,7 +25,7 @@ class CustomerProcess:
         
         # βάζω τον scooper να βοηθήσει αν μπορεί
         if stage == "toppings":
-         return (yield from self.process_toppings_with_help(customer))
+            return (yield from self.process_toppings_with_help(customer))
         
         # if stage in ("coffee", "milkshake"):
         #     print(f"{self.env.now:.2f} | Barista busy with {stage}")
