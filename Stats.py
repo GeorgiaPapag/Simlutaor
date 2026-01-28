@@ -9,13 +9,12 @@ class Stats:
         self.scooper_waits = []
         self.toppings_waits = []
 
-        # --- NEW: tables ---
-        self.table_seekers = 0              # πόσοι ζήτησαν τραπέζι
-        self.table_waits = []               # χρόνος αναμονής για τραπέζι
-        self.table_timeouts_to_takeaway = 0 # πόσοι δεν βρήκαν σε 5' και έγιναν πακέτο
+        self.table_seekers = 0 # how many requested a table
+        self.table_waits = []  # waiting time for a table
+        self.table_timeouts_to_takeaway = 0 # how many didn’t get a table within 5 minutes and switched to takeaway
 
-        # --- NEW: queue length samples for tables (optional monitor) ---
-        self.table_queue_len_samples = []   # δείγματα μήκους ουράς (len(resource.queue))
+        # queue length samples for tables
+        self.table_queue_len_samples = []
 
         self.resource_busy_time = {
             "barista": 0.0,
@@ -26,16 +25,14 @@ class Stats:
             "cashier_express": 0.0
         }
 
-    # Add wait times
-    # -------------------------
+    # αdd wait times
     def add_cashier_wait(self, t: float):
         self.cashier_waits.append(t)
 
     def add_scooper_wait(self, t: float):
         self.scooper_waits.append(t)
 
-    # Percentiles
-    # -------------------------
+    # percentiles
     def p95_cashier_wait(self):
         if not self.cashier_waits:
             return 0.0
@@ -47,7 +44,7 @@ class Stats:
         return np.percentile(self.scooper_waits, 95)
     
     def reset(self):
-        """Reset all KPI-related statistics after warm-up."""
+        # reset all KPI-related statistics after warm-up
         self.total_customers = 0
         self.abandoned_customers = 0
 
@@ -55,7 +52,7 @@ class Stats:
         self.scooper_waits.clear()
         self.toppings_waits.clear()
 
-        # --- NEW reset for tables ---
+        # new reset for tables
         self.table_seekers = 0
         self.table_waits.clear()
         self.table_timeouts_to_takeaway = 0

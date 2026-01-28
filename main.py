@@ -13,14 +13,10 @@ from CustomerProcess import CustomerProcess
 # change to "self_order" for the 1rst scenario or chnage to "express" for the 2nd scenario
 SCENARIO = "base"  
 
-# --------------------------
-# 95% CI helper (t-interval)
-# --------------------------
+# 95% CI helper
 def mean_ci_95(data):
-    """
-    Returns (mean, low, high) for a 95% confidence interval using t critical value.
-    Uses SciPy if available; otherwise uses a solid approximation.
-    """
+    # returns (mean, low, high) for a 95% confidence interval using t critical value
+    # uses SciPy or a fallback approximation
     data = np.array(data, dtype=float)
     n = len(data)
     if n == 0:
@@ -32,13 +28,13 @@ def mean_ci_95(data):
     mean = float(data.mean())
     s = float(data.std(ddof=1))
 
-    # Try SciPy for exact t critical
+    # try SciPy for exact t critical
     try:
         from scipy.stats import t as tdist  # type: ignore
         tcrit = float(tdist.ppf(0.975, df=n - 1))
     except Exception:
-        # Good approximation for typical coursework replication counts
-        # (n >= 15 => tcrit ~ 2.0, slightly higher for n~20)
+        # For typical numbers of simulation runs (n ≥ 15),
+        # the t critical value is about 2.0, which is a good enough approximation.
         if n <= 10:
             tcrit = 2.262  # approx df=9
         elif n <= 20:
@@ -51,10 +47,7 @@ def mean_ci_95(data):
     half = tcrit * s / math.sqrt(n)
     return mean, mean - half, mean + half
 
-
-# --------------------------
-# One replication (ONE full run)
-# --------------------------
+# one replication (one full run)
 def run_one_replication(seed: int):
     random.seed(seed)
 
@@ -67,10 +60,10 @@ def run_one_replication(seed: int):
     CLOSE_TIME = config.time.CLOSE_TIME
     WARM_UP = config.time.WARM_UP_TIME  # minutes
 
-    # IMPORTANT: fresh stats per replication (independent replications)
+    # fresh stats per replication - independent replications
     stats = Stats()
 
-    # Run DAYS (your existing "per-day env" approach)
+    # run days
     for day in range(DAYS):
         env = simpy.Environment()
 
@@ -83,12 +76,13 @@ def run_one_replication(seed: int):
         if day == 0 and WARM_UP > 0:
             warm_up_end = OPEN_TIME + WARM_UP
             env.run(until=warm_up_end)
-            stats.reset()          # reset only stats after warm-up
+            # reset only stats after warm-up
+            stats.reset()          
             env.run(until=CLOSE_TIME)
         else:
             env.run(until=CLOSE_TIME)
 
-    # ---- KPIs (one number per KPI) ----
+    # KPIs
     total = getattr(stats, "total_customers", 0)
     abandoned = getattr(stats, "abandoned_customers", 0)
     abandonment_rate = (abandoned / total) if total > 0 else 0.0
@@ -96,20 +90,20 @@ def run_one_replication(seed: int):
     cashier_p95 = stats.p95_cashier_wait()
     scooper_p95 = stats.p95_scooper_wait()
 
-    # Utilization based on steady-time (open minutes * days minus warm-up once)
+    # utilization based on steady-time (open minutes * days minus warm-up once)
     OPEN_MINUTES_PER_DAY = CLOSE_TIME - OPEN_TIME
     steady_time = (OPEN_MINUTES_PER_DAY * DAYS) - WARM_UP
     utilizations = {}
     for res, busy in stats.resource_busy_time.items():
         utilizations[res] = (busy / steady_time) if steady_time > 0 else 0.0
 
-    # ---- Tables KPIs ----
+    # tables KPIs
     table_mean_wait = float(np.mean(stats.table_waits)) if stats.table_waits else 0.0
     table_p95_wait  = float(np.percentile(stats.table_waits, 95)) if stats.table_waits else 0.0
     table_timeout_rate = (stats.table_timeouts_to_takeaway / stats.table_seekers) if stats.table_seekers > 0 else 0.0
 
-    print("table_waits count:", len(stats.table_waits))
-    print("table_waits >0:", sum(1 for w in stats.table_waits if w > 0))
+    # print("table_waits count:", len(stats.table_waits))
+    # print("table_waits >0:", sum(1 for w in stats.table_waits if w > 0))
 
     nonzero_waits = [w for w in stats.table_waits if w > 0]
     table_mean_wait_nonzero = float(np.mean(nonzero_waits)) if nonzero_waits else 0.0
@@ -123,7 +117,6 @@ def run_one_replication(seed: int):
         "utilizations": utilizations,
         "total_customers": total,
 
-        # NEW
         "table_mean_wait": table_mean_wait,
         "table_p95_wait": table_p95_wait,
         "table_timeout_rate": table_timeout_rate,
@@ -135,41 +128,35 @@ def run_one_replication(seed: int):
 
     }
 
-
-# --------------------------
-# Many replications
-# --------------------------
+# many replications
 def run_many_replications(N=20, seed0=100):
     results = []
     for i in range(N):
         results.append(run_one_replication(seed=seed0 + i))
     return results
 
-
-# --------------------------
-# MAIN: orchestrate + CIs
-# --------------------------
+# main
 def main():
     N = 20
     reps = run_many_replications(N=N, seed0=100)
 
-    # Abandonment rate CI
+    # abandonment rate CI
     aband = [r["abandonment_rate"] for r in reps]
     m, lo, hi = mean_ci_95(aband)
     print(f"\nReplications: {N}")
     print(f"Abandonment rate: mean={m:.4f} | 95% CI [{lo:.4f}, {hi:.4f}]")
 
-    # Cashier p95 CI
+    # cashier p95 CI
     cashier_p95s = [r["cashier_p95"] for r in reps]
     m, lo, hi = mean_ci_95(cashier_p95s)
     print(f"Cashier p95 wait (min): mean={m:.3f} | 95% CI [{lo:.3f}, {hi:.3f}]")
 
-    # Scooper p95 CI
+    # scooper p95 CI
     scooper_p95s = [r["scooper_p95"] for r in reps]
     m, lo, hi = mean_ci_95(scooper_p95s)
     print(f"Scooper p95 wait (min): mean={m:.3f} | 95% CI [{lo:.3f}, {hi:.3f}]")
 
-    # ---- Tables KPIs + CI ----
+    # tables KPIs + CI 
     table_mean = [r["table_mean_wait"] for r in reps]
     m, lo, hi = mean_ci_95(table_mean)
     print(f"Table mean wait (min): mean={m:.3f} | 95% CI [{lo:.3f}, {hi:.3f}]")
@@ -182,7 +169,6 @@ def main():
     m, lo, hi = mean_ci_95(timeout_rate)
     print(f"Table->takeaway (no table within 5'): mean={m:.2%} | 95% CI [{lo:.2%}, {hi:.2%}]")
 
-    # (counts, χωρίς CI αν δεν θες)
     seekers = [r["table_seekers"] for r in reps]
     m, lo, hi = mean_ci_95(seekers)
     print(f"Table seekers per run: mean={m:.1f} | 95% CI [{lo:.1f}, {hi:.1f}]")
@@ -203,9 +189,7 @@ def main():
     print(f"% who waited (>0): {avg_share_waiting:.2%}")
     print(f"Avg table wait (only those who waited): {avg_table_wait_nz:.3f} min")
 
-
-    # Utilization CI per resource
-    # (take resource names from first replication)
+    # utilization CI per resource
     print("\nUtilization (per resource):")
     res_names = list(reps[0]["utilizations"].keys()) if reps else []
     for res in res_names:
@@ -213,7 +197,7 @@ def main():
         m, lo, hi = mean_ci_95(vals)
         print(f"  {res}: mean={m:.2%} | 95% CI [{lo:.2%}, {hi:.2%}]")
 
-    # ---- Average total arrivals CI ----
+    # average total arrivals CI 
     arrivals = [r["total_customers"] for r in reps]
     m, lo, hi = mean_ci_95(arrivals)
 
@@ -221,8 +205,6 @@ def main():
         f"Total arrivals per run: mean={m:.1f} "
         f"| 95% CI [{lo:.1f}, {hi:.1f}]"
     )
-
-
 
 if __name__ == "__main__":
     main()

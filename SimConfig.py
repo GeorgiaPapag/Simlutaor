@@ -21,19 +21,18 @@ class SimTimeConfig:
 # customer arrivals
 @dataclass
 class ArrivalConfig:
-    # Ρυθμοί αφίξεων (μέσος χρόνος μεταξύ αφίξεων σε λεπτά)
+    # arriνal rates (mean time between arrivals in minutes)
     OFF_PEAK_MEAN: float = 6.0
     PEAK_MEAN: float = 2.5
 
-    # Παράθυρα αιχμής (σε λεπτά από 00:00)
-    PEAK_START: int = 15 * 60        # 15:00
-    PEAK_END: int = 22 * 60          # 22:00
+    # peak time windows (in minutes form 00:00)
+    PEAK_START: int = 15 * 60 # 15:00
+    PEAK_END: int = 22 * 60 # 22:00
 
 # customer consumption choice
 @dataclass
 class ConsumptionConfig:
-    SEATED_PROB: float = 0.40   # 40% καθιστοί
-    #TAKE_AWAY_PROB: float = 0.60 # 60% take away
+    SEATED_PROB: float = 0.40 # 40% of customers are seated
 
 # initial choices in orders
 @dataclass
@@ -43,7 +42,7 @@ class OrderChoiceConfig:
     def __post_init__(self):
         self.INITIAL_ORDER_PROBS = {
             "ice_cream": 0.43,
-            "waffle": 0.14,          # waffle + ice cream
+            "waffle": 0.14,
             "milkshake": 0.16,
             "coffee": 0.23,
             "toppings": 0.02,
@@ -63,9 +62,9 @@ class ContinuationConfig:
                 "pay": 0.51,
             },
             "waffle": {
-                "ice_cream": 1.00,   # υποχρεωτικό
+                "ice_cream": 1.00,   # mandatory
             },
-            # παγωτό ΜΕΤΑ από βάφλα
+            # ice cream after waffle
             "ice_cream_after_waffle": {
                 "toppings": 0.45,
                 "pay": 0.55,
@@ -100,7 +99,6 @@ class IceCreamConfig:
             3: 0.15,
         }
 
-
 @dataclass
 class DistSpec:
     dist: Literal["uniform", "normal"]
@@ -125,8 +123,8 @@ class ServiceTimeConfig:
 # waiting
 @dataclass
 class WaitingRulesConfig:
-    MAX_QUEUE_WAIT: int = 12.0      # λεπτά
-    MAX_TABLE_WAIT: int = 5.0       # λεπτά
+    MAX_QUEUE_WAIT: int = 12.0 # minutes
+    MAX_TABLE_WAIT: int = 5.0
 
 # resources px employers
 @dataclass
@@ -140,7 +138,6 @@ class ResourceConfig:
 
     TABLES: int = 8
 
-
 @dataclass
 class SimulationConfig:
     scenario: str = "base"
@@ -150,7 +147,7 @@ class SimulationConfig:
     order_choices: OrderChoiceConfig = field(default_factory=OrderChoiceConfig)
     continuations: ContinuationConfig = field(default_factory=ContinuationConfig)
     consumption: ConsumptionConfig = field(default_factory=ConsumptionConfig)
-    ice_cream: IceCreamConfig = field(default_factory=IceCreamConfig)  # 👈 ΝΕΟ
+    ice_cream: IceCreamConfig = field(default_factory=IceCreamConfig)
     service_times: ServiceTimeConfig = field(default_factory=ServiceTimeConfig)
     waiting_rules: WaitingRulesConfig = field(default_factory=WaitingRulesConfig)
     resources: ResourceConfig = field(default_factory=ResourceConfig)

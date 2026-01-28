@@ -11,12 +11,11 @@ class ArrivalProcess:
         self.customer_id = 0
 
         self.store_open = self.env.event()
-        self.store_open.succeed()  # αρχικά ανοιχτό (θα κλείσει στο πρώτο CLOSE)
+        self.store_open.succeed()
         self.customer_process.store_open = self.store_open
 
-
     def get_interarrival_time(self) -> float:
-        """Return next interarrival time based on peak / off-peak hours."""
+        # return next interarrival time based on peak / off-peak hours
         current_time = self.env.now % (24 * 60)
 
         if self.config.arrivals.PEAK_START <= current_time < self.config.arrivals.PEAK_END:
@@ -27,49 +26,43 @@ class ArrivalProcess:
         return random.expovariate(1 / mean)
 
     def run(self):
-        """SimPy process that generates arriving customers,
-        respecting store opening hours."""
+        # creates customers during store hours
         while True:
             now = self.env.now
             time_of_day = now % (24 * 60)
 
-            # ----------------------------------
-            # Αν είμαστε εκτός ωραρίου
-            # ----------------------------------
-            
+            # if we outside business hours
             if (
                 time_of_day < self.config.time.OPEN_TIME
                 or time_of_day >= self.config.time.CLOSE_TIME
             ):
-                # υπολόγισε πότε ανοίγει ξανά
+                # calculate when the store will open again
                 if time_of_day < self.config.time.OPEN_TIME:
                     next_open = self.config.time.OPEN_TIME
                 else:
-                    # επόμενη μέρα
+                    # next day
                     next_open = 24 * 60 + self.config.time.OPEN_TIME
 
                 wait_time = next_open - time_of_day
 
-                # ΚΛΕΙΣΙΜΟ ΚΑΤΑΣΤΗΜΑΤΟΣ (μόνο αν δεν είναι ήδη κλειστό)
+                # close store (if its not already closed)
                 if self.store_open.triggered:
                     self.store_open = self.env.event()
                     self.customer_process.store_open = self.store_open
 
 
                 yield self.env.timeout(wait_time)
-                # ΑΝΟΙΓΜΑ ΚΑΤΑΣΤΗΜΑΤΟΣ
+                # open store
                 self.store_open.succeed()
 
                 continue
 
-            # ----------------------------------
-            # Εντός ωραρίου → κανονική άφιξη
-            # ----------------------------------
+            # within business hours → normal arrival
             interarrival = self.get_interarrival_time()
             yield self.env.timeout(interarrival)
 
-            # Μπορεί να περάσαμε εκτός ωραρίου ενδιάμεσα
             time_of_day = self.env.now % (24 * 60)
+            # skip processing if we are past closing time
             if time_of_day >= self.config.time.CLOSE_TIME:
                 continue
 

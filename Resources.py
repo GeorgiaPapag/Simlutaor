@@ -1,16 +1,13 @@
 import simpy
 
 class Resources:
-    """
-    Container class for all SimPy resources of the system.
-    No customer logic is implemented here.
-    """
+    # resources of the system
 
     def __init__(self, env: simpy.Environment, config):
         self.env = env
         self.config = config
 
-        # Cashier (order & payment)
+        # cashier (order & payment)
         self.cashier = simpy.PriorityResource(
             env,
             capacity=config.resources.CASHIERS
@@ -18,8 +15,7 @@ class Resources:
 
         self.cashier_express = simpy.PriorityResource(env, capacity=1)
 
-
-        # Production resources
+        # production resources
         self.scooper = simpy.PriorityResource(
             env,
             capacity=config.resources.SCOOPERS
@@ -40,7 +36,7 @@ class Resources:
             capacity=config.resources.TOPPINGS_STAFF
         )
 
-        # Service for seated customers
+        # service for seated customers
         self.waiter = simpy.Resource(
             env,
             capacity=config.resources.WAITERS
