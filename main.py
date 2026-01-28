@@ -9,6 +9,9 @@ from Stats import Stats
 from ArrivalProcess import ArrivalProcess
 from CustomerProcess import CustomerProcess
 
+# "base" for the initial
+# change to "self_order" for the 1rst scenario or chnage to "express" for the 2nd scenario
+SCENARIO = "base"  
 
 # --------------------------
 # 95% CI helper (t-interval)
@@ -55,7 +58,9 @@ def mean_ci_95(data):
 def run_one_replication(seed: int):
     random.seed(seed)
 
-    config = SimulationConfig()
+    config = SimulationConfig(scenario=SCENARIO)
+    
+    config.scenario = SCENARIO
 
     DAYS = config.time.RUN_LENGTH_DAYS
     OPEN_TIME = config.time.OPEN_TIME

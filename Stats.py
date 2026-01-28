@@ -22,7 +22,8 @@ class Stats:
             "scooper": 0.0,
             "cashier": 0.0,
             "waiter": 0.0,
-            "toppings_staff": 0.0
+            "toppings_staff": 0.0,
+            "cashier_express": 0.0
         }
 
     # Add wait times

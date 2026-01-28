@@ -143,6 +143,8 @@ class ResourceConfig:
 
 @dataclass
 class SimulationConfig:
+    scenario: str = "base"
+
     time: SimTimeConfig = field(default_factory=SimTimeConfig)
     arrivals: ArrivalConfig = field(default_factory=ArrivalConfig)
     order_choices: OrderChoiceConfig = field(default_factory=OrderChoiceConfig)
@@ -152,3 +154,12 @@ class SimulationConfig:
     service_times: ServiceTimeConfig = field(default_factory=ServiceTimeConfig)
     waiting_rules: WaitingRulesConfig = field(default_factory=WaitingRulesConfig)
     resources: ResourceConfig = field(default_factory=ResourceConfig)
+
+    def __post_init__(self):
+        self.apply_scenario()
+
+    def apply_scenario(self):
+        if self.scenario == "self_order":
+            self.service_times.ORDER = DistSpec("uniform", 0.3, 0.8)
+        else:
+            self.service_times.ORDER = DistSpec("uniform", 0.5, 1.2)

@@ -16,6 +16,9 @@ class Resources:
             capacity=config.resources.CASHIERS
         )
 
+        self.cashier_express = simpy.PriorityResource(env, capacity=1)
+
+
         # Production resources
         self.scooper = simpy.PriorityResource(
             env,

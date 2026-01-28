@@ -276,7 +276,32 @@ class CustomerProcess:
         # start time
         start_wait_cashier = self.env.now
 
-        # ---- Order at cashier ----
+        current_stage = self.choose_initial_product()
+        # EXPRESS scenario: small_purchase goes to express cashier and finishes
+        if getattr(self.config, "scenario", "base") == "express" and current_stage == "small_purchase":
+            start_wait = self.env.now
+
+            with self.resources.cashier_express.request(priority=0) as req:
+                result = yield req | self.env.timeout(self.config.waiting_rules.MAX_QUEUE_WAIT)
+
+                if req not in result:
+                    self.stats.abandoned_customers += 1
+                    return
+
+                # μετράμε αναμονή όπως στο cashier (προαιρετικά κρατάς ίδια λίστα)
+                self.stats.cashier_waits.append(self.env.now - start_wait)
+
+                # εξυπηρέτηση: order + payment
+                order_t = self.sample_time(self.config.service_times.ORDER)
+                pay_t = self.sample_time(self.config.service_times.PAYMENT)
+                service_t = order_t + pay_t
+
+                yield self.env.timeout(service_t)
+                self.stats.resource_busy_time["cashier_express"] += service_t
+
+            return
+
+        # Normal Order at cashier for all
         with self.resources.cashier.request(priority=0) as req:
             result = yield req | self.env.timeout(self.config.waiting_rules.MAX_QUEUE_WAIT)
             if req not in result:
@@ -294,7 +319,7 @@ class CustomerProcess:
         # print(f"{self.env.now:.2f} | Customer {customer.id} ordered")
 
         # ---- Initial product ----
-        current_stage = self.choose_initial_product()
+        # current_stage = self.choose_initial_product()
         # print(
         #     f"{self.env.now:.2f} | "
         #     f"Customer {customer.id} initial product = {current_stage}"
@@ -377,7 +402,7 @@ class CustomerProcess:
                     self.stats.table_waits.append(self.env.now - start_wait_table)
                     if self.env.now - start_wait_table > 0:
                         print("table wait:", self.env.now - start_wait_table)
-                        
+
                     # Σερβίρισμα από σερβιτόρο
                     with self.resources.waiter.request() as w_req:
                         yield w_req
